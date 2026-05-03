@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({  
-  base: '/', // 用户站点使用根路径
+  base: '/aiworld.github.io/', 
   plugins: [react()],
   resolve: {
     alias: {
