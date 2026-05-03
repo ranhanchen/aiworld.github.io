@@ -248,22 +248,14 @@ export default function App() {
             <h1 className="text-xl font-bold mb-6">
               {editingSaveId ? '编辑存档设定' : '新建存档设定'}
             </h1>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1.5">存档名</label>
-              <input
-                type="text"
-                value={saveTitle}
-                onChange={(e) => setSaveTitle(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="给你的冒险取个名字..."
-              />
-            </div>
             <ConfigForm
               initialConfig={configForNewSave ?? undefined}
               onSave={handleSaveConfig}
               onCancel={handleCancelConfig}
               saveMessage={saveMessage}
               onClearMessage={handleClearMessage}
+              saveTitle={saveTitle}
+              onSaveTitleChange={setSaveTitle}
             />
           </div>
         </div>

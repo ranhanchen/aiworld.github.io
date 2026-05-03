@@ -14,7 +14,6 @@ type ViewState = 'loading' | 'loaded' | 'empty' | 'error';
 
 export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveListProps) {
   const [saves, setSaves] = useState<Save[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [showImportExport, setShowImportExport] = useState(false);
@@ -36,52 +35,32 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
     loadSaves();
   }, [loadSaves]);
 
-  const handleSelect = useCallback((id: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      return next;
-    });
-  }, []);
-
   const handleDelete = useCallback(async (id: string) => {
     const confirmed = window.confirm('确定要删除这个存档吗？删除后无法恢复。');
     if (!confirmed) return;
     try {
       await deleteSave(id);
       setSaves((prev) => prev.filter((s) => s.id !== id));
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : String(e));
     }
   }, []);
 
-  const handleBatchExport = useCallback(async () => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-
+  const handleDownload = useCallback(async (save: Save) => {
     try {
-      const jsonStr = await exportSaves(ids);
+      const jsonStr = await exportSaves([save.id]);
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `text-adventure-backup-${Date.now()}.json`;
+      const safeName = (save.metadata.title || `存档_${save.id}`).replace(/[^a-zA-Z0-9一-龥_-]/g, '_');
+      a.download = `${safeName}-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setSelectedIds(new Set());
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : String(e));
     }
-  }, [selectedIds]);
+  }, []);
 
   if (viewState === 'loading') {
     return (
@@ -143,14 +122,6 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">你的冒险</h2>
         <div className="flex gap-2">
-          {selectedIds.size > 0 && (
-            <button
-              onClick={handleBatchExport}
-              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:opacity-90 transition-opacity"
-            >
-              导出选中 ({selectedIds.size})
-            </button>
-          )}
           <button
             onClick={() => setShowImportExport(!showImportExport)}
             className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-text-primary-dark rounded-lg text-xs hover:opacity-90 transition-opacity"
@@ -173,11 +144,10 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
           <SaveCard
             key={save.id}
             save={save}
-            selected={selectedIds.has(save.id)}
-            onSelect={handleSelect}
             onClick={onPlaySave}
             onEdit={onEditSave}
             onDelete={handleDelete}
+            onDownload={handleDownload}
           />
         ))}
       </div>

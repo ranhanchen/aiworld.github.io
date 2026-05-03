@@ -10,10 +10,12 @@ interface ConfigFormProps {
   onCancel: () => void;
   saveMessage: string | null;
   onClearMessage: () => void;
+  saveTitle?: string;
+  onSaveTitleChange?: (title: string) => void;
 }
 
 
-export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessage, onClearMessage }: ConfigFormProps) {
+export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessage, onClearMessage, saveTitle, onSaveTitleChange }: ConfigFormProps) {
   const [config, setConfig] = useState<GameConfig>(() => {
     return migrateGameConfig(initialConfig);
   });
@@ -570,6 +572,17 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
 
         {activeTab === 'system' && (
           <div className="space-y-4">
+            {onSaveTitleChange !== undefined && (
+              <FieldRow label="存档名">
+                <input
+                  type="text"
+                  value={saveTitle ?? ''}
+                  onChange={(e) => onSaveTitleChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                  placeholder="给你的冒险取个名字..."
+                />
+              </FieldRow>
+            )}
             <FieldRow label="语言">
               <select
                 value={config.system.language}
@@ -666,7 +679,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
                 onChange={(e) => updateAiRestriction('aiBasePrompt', e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                 placeholder="告诉AI如何理解玩家输入，以及如何回复的底层规则..."
-                rows={4}
+                rows={6}
               />
             </FieldRow>
             {Object.entries(config.aiRestriction.customFields).map(([key, value], idx) => (
@@ -925,7 +938,7 @@ function FieldWithGenerate({
             onChange={(e) => onChange(e.target.value)}
             className={inputClass}
             placeholder={placeholder}
-            rows={3}
+            rows={5}
           />
         ) : (
           <input
