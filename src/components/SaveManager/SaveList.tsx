@@ -49,6 +49,8 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
+    const confirmed = window.confirm('确定要删除这个存档吗？删除后无法恢复。');
+    if (!confirmed) return;
     try {
       await deleteSave(id);
       setSaves((prev) => prev.filter((s) => s.id !== id));

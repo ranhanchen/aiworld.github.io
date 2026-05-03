@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Save } from '@/types/save';
 import type { GameConfig } from '@/types/config';
 import { getActiveApi } from '@/types/config';
-import { createSave, getLatestSave, updateSave } from '@/db/repository';
+import { createSave, getLatestSave, getSave, updateSave } from '@/db/repository';
 import { COVER_COLORS } from '@/config/constants';
 import SaveList from '@/components/SaveManager/SaveList';
 import ConfigForm from '@/components/ConfigCenter/ConfigForm';
@@ -20,6 +20,7 @@ export default function App() {
   const [currentSave, setCurrentSave] = useState<Save | null>(null);
   const [configForNewSave, setConfigForNewSave] = useState<GameConfig | null>(null);
   const [editingSaveId, setEditingSaveId] = useState<string | null>(null);
+  const [saveTitle, setSaveTitle] = useState<string>('');
   const [showMemory, setShowMemory] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
@@ -62,6 +63,7 @@ export default function App() {
 
   const handleCreateNew = useCallback(async () => {
     setEditingSaveId(null);
+    setSaveTitle('');
     const latest = await getLatestSave();
     if (latest) {
       setConfigForNewSave(latest.metadata.configSnapshot);
@@ -71,38 +73,50 @@ export default function App() {
 
   const handleEditSave = useCallback((save: Save) => {
     setEditingSaveId(save.id);
+    setSaveTitle(save.metadata.title || '');
     setConfigForNewSave(save.metadata.configSnapshot);
     setScreen('config');
   }, []);
 
   const handleSaveConfig = useCallback(
     async (config: GameConfig) => {
-      if (editingSaveId) {
-        const updated = await updateSave(editingSaveId, {
-          metadata: { configSnapshot: config },
-        });
-        if (updated) {
-          setCurrentSave(updated);
-          try { localStorage.setItem(`save_backup_${editingSaveId}`, JSON.stringify(updated)); } catch {}
+      try {
+        if (editingSaveId) {
+          const updated = await updateSave(editingSaveId, {
+            metadata: { title: saveTitle, configSnapshot: config },
+          });
+          if (updated) {
+            setCurrentSave(updated);
+            try { localStorage.setItem(`save_backup_${editingSaveId}`, JSON.stringify(updated)); } catch {}
+          } else {
+            console.error('[App] handleSaveConfig: updateSave 返回 undefined');
+            setSaveMessage('保存失败，请重试');
+            setTimeout(() => setSaveMessage(null), 2000);
+            return;
+          }
+        } else {
+          const save = await createSave({
+            metadata: {
+              title: saveTitle,
+              description: '',
+              coverColor: pickRandomCoverColor(),
+              configSnapshot: config,
+            },
+          });
+          setCurrentSave(save);
+          setEditingSaveId(save.id);
+          try { localStorage.setItem(`save_backup_${save.id}`, JSON.stringify(save)); } catch {}
         }
-      } else {
-        const save = await createSave({
-          metadata: {
-            title: '',
-            description: '',
-            coverColor: pickRandomCoverColor(),
-            configSnapshot: config,
-          },
-        });
-        setCurrentSave(save);
-        setEditingSaveId(save.id);
-        try { localStorage.setItem(`save_backup_${save.id}`, JSON.stringify(save)); } catch {}
-      }
 
-      setSaveMessage('设定已保存');
-      setTimeout(() => setSaveMessage(null), 2000);
+        setSaveMessage('设定已保存');
+        setTimeout(() => setSaveMessage(null), 2000);
+      } catch (err) {
+        console.error('[App] handleSaveConfig 异常:', err);
+        setSaveMessage('保存失败: ' + (err instanceof Error ? err.message : String(err)));
+        setTimeout(() => setSaveMessage(null), 3000);
+      }
     },
-    [editingSaveId],
+    [editingSaveId, saveTitle],
   );
 
   const handleClearMessage = useCallback(() => {
@@ -112,19 +126,45 @@ export default function App() {
   const handleCancelConfig = useCallback(() => {
     setConfigForNewSave(null);
     setEditingSaveId(null);
+    setSaveTitle('');
     setScreen('saves');
   }, []);
 
-  const handlePlaySave = useCallback((save: Save) => {
-    const activeApi = getActiveApi(save.metadata?.configSnapshot?.network);
-      console.log('[App] handlePlaySave 接收到的 save:', {
-        id: save.id,
-        'configSnapshot存在': !!save.metadata?.configSnapshot,
-        'network存在': !!save.metadata?.configSnapshot?.network,
-        'apiKey有值': !!activeApi?.apiKey,
-        'apiKey长度': activeApi?.apiKey?.length,
-      });
-    setCurrentSave(save);
+  const handlePlaySave = useCallback(async (save: Save) => {
+    // 从数据库重新加载以确保获取最新的 configSnapshot
+    const freshSave = await getSave(save.id);
+    const targetSave = freshSave || save;
+
+    const activeApi = getActiveApi(targetSave.metadata?.configSnapshot?.network);
+    console.log('[App] handlePlaySave 接收到的 save:', {
+      id: targetSave.id,
+      'configSnapshot存在': !!targetSave.metadata?.configSnapshot,
+      'network存在': !!targetSave.metadata?.configSnapshot?.network,
+      'apiKey有值': !!activeApi?.apiKey,
+      'apiKey长度': activeApi?.apiKey?.length,
+      '从数据库重新加载': !!freshSave,
+    });
+
+    // 如果 API 配置为空，尝试从 localStorage 备份恢复
+    if (!activeApi?.apiKey) {
+      try {
+        const raw = localStorage.getItem(`save_backup_${targetSave.id}`);
+        if (raw) {
+          const backup: Save = JSON.parse(raw);
+          const backupApi = getActiveApi(backup.metadata?.configSnapshot?.network);
+          if (backupApi?.apiKey) {
+            console.log('[App] 从 localStorage 备份恢复 API 配置');
+            setCurrentSave(backup);
+            setScreen('game');
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[App] localStorage 备份读取失败:', e);
+      }
+    }
+
+    setCurrentSave(targetSave);
     setScreen('game');
   }, []);
 
@@ -208,6 +248,16 @@ export default function App() {
             <h1 className="text-xl font-bold mb-6">
               {editingSaveId ? '编辑存档设定' : '新建存档设定'}
             </h1>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1.5">存档名</label>
+              <input
+                type="text"
+                value={saveTitle}
+                onChange={(e) => setSaveTitle(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                placeholder="给你的冒险取个名字..."
+              />
+            </div>
             <ConfigForm
               initialConfig={configForNewSave ?? undefined}
               onSave={handleSaveConfig}

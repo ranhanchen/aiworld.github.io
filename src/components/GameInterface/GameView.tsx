@@ -12,6 +12,7 @@ import VirtualMessageList from '@/components/GameInterface/VirtualMessageList';
 import InputArea from '@/components/GameInterface/InputArea';
 import ContextMenu from '@/components/GameInterface/ContextMenu';
 import MessageEditor from '@/components/GameInterface/MessageEditor';
+import { startBackgroundAIRequest, hasPendingTask } from '@/services/backgroundAI';
 
 interface GameViewProps {
   save: Save;
@@ -36,6 +37,18 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   const selectedApiOverrideRef = useRef<string | null>(null);
   const editingMessageRef = useRef<Message | null>(null);
 
+  const INPUT_DRAFT_KEY = `ta_input_draft_${save.id}`;
+  const [inputDraft, setInputDraft] = useState<string>(() => {
+    try {
+      return localStorage.getItem(INPUT_DRAFT_KEY) || '';
+    } catch { return ''; }
+  });
+
+  const handleInputDraftChange = useCallback((text: string) => {
+    setInputDraft(text);
+    try { localStorage.setItem(INPUT_DRAFT_KEY, text); } catch {}
+  }, [INPUT_DRAFT_KEY]);
+
   const parseWithFallback = useCallback(async (messageId: string, rawText: string): Promise<{ segments: MessageSegment[]; isValid: boolean }> => {
     try {
       const parserWorker = new ParserWorker();
@@ -55,6 +68,11 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     const config = save.metadata.configSnapshot;
     const network = config?.network;
     if (!network) {
+      console.warn('[GameView] getNetworkConfig: configSnapshot.network 不存在', {
+        saveId: save.id,
+        hasConfigSnapshot: !!config,
+        hasNetwork: !!network,
+      });
       return { apiKey: '', apiEndpoint: '', modelName: '', temperature: 0.8, topP: 0.95 };
     }
 
@@ -64,7 +82,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
     const activeApi = getActiveApi(lookupNetwork);
 
-    if (activeApi) {
+    if (activeApi && activeApi.apiKey && activeApi.apiEndpoint) {
       return {
         apiKey: activeApi.apiKey || '',
         apiEndpoint: activeApi.apiEndpoint || '',
@@ -74,6 +92,17 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       };
     }
 
+    if (activeApi) {
+      console.warn('[GameView] getNetworkConfig: activeApi 存在但字段为空', {
+        hasApiKey: !!activeApi.apiKey,
+        hasEndpoint: !!activeApi.apiEndpoint,
+        modelName: activeApi.modelName,
+        apisCount: network.apis?.length,
+        selectedId: lookupNetwork.selectedId,
+      });
+    }
+
+    // 尝试从 localStorage 备份恢复
     if (save.id) {
       try {
         const raw = localStorage.getItem(`save_backup_${save.id}`);
@@ -83,6 +112,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           if (backupNetwork) {
             const backupApi = getActiveApi(backupNetwork);
             if (backupApi?.apiKey) {
+              console.log('[GameView] 从 localStorage 备份恢复 API 配置');
               return {
                 apiKey: backupApi.apiKey,
                 apiEndpoint: backupApi.apiEndpoint || '',
@@ -95,6 +125,21 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         }
       } catch (e) {
         console.warn('[GameView] localStorage 备份读取失败:', e);
+      }
+    }
+
+    // 兜底：遍历所有 apis，取第一个有 apiKey 的
+    if (network.apis && network.apis.length > 0) {
+      const firstValid = network.apis.find(a => a.apiKey);
+      if (firstValid) {
+        console.log('[GameView] 使用第一个有值的 API 配置:', firstValid.label);
+        return {
+          apiKey: firstValid.apiKey,
+          apiEndpoint: firstValid.apiEndpoint || '',
+          modelName: firstValid.modelName || '',
+          temperature: firstValid.temperature ?? 0.8,
+          topP: firstValid.topP ?? 0.95,
+        };
       }
     }
 
@@ -132,15 +177,15 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     setLoadingState('loading');
     try {
       const msgs = await getMessagesBySaveId(save.id, CONTEXT_WINDOW_SIZE * 2);
-      console.log('[GameView] loadInitialMessages:', {
-        saveId: save.id,
-        roundCount: save.metadata.roundCount,
-        msgCount: msgs.length,
-      });
       setMessages(msgs);
       setHasMoreMessages(msgs.length >= CONTEXT_WINDOW_SIZE * 2);
       setCurrentRound(save.metadata.roundCount);
-      setLoadingState('idle');
+
+      if (hasPendingTask(save.id)) {
+        setLoadingState('sending');
+      } else {
+        setLoadingState('idle');
+      }
     } catch {
       setLoadingState('error');
     }
@@ -193,130 +238,38 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
       try {
         const roundIndex = currentRound + 1;
-        
-        // 创建用户消息 - 即使数据库写入失败，也先显示在内存中
-        let userMessage: Message;
-        try {
-          userMessage = await createMessage({
-            saveId: save.id,
-            roundIndex,
-            role: 'user',
-            rawText: text,
-            status: 'completed',
-          });
-        } catch (dbError) {
-          console.warn('[GameView] 用户消息写入数据库失败，使用内存临时消息:', dbError);
-          // 生成一个临时消息对象用于内存显示
-          const now = Date.now();
-          userMessage = {
-            id: `temp_user_${now}`,
-            saveId: save.id,
-            roundIndex,
-            role: 'user',
-            rawText: text,
-            segments: [],
-            status: 'completed' as const,
-            createdAt: now,
-            updatedAt: now,
-          };
-        }
+        const chatMessages = buildChatContext(messages, { role: 'user', rawText: text } as Message, save);
 
-        setMessages((prev) => [...prev, userMessage]);
-        setCurrentRound(roundIndex);
-        setLoadingState('sending');
-
-        // 创建 AI 消息
-        let aiMessage: Message;
-        try {
-          aiMessage = await createMessage({
-            saveId: save.id,
-            roundIndex,
-            role: 'ai',
-            rawText: '',
-            segments: [],
-            status: 'streaming',
-          });
-        } catch (dbError) {
-          console.warn('[GameView] AI消息写入数据库失败，使用内存临时消息:', dbError);
-          // 生成一个临时消息对象用于内存显示
-          const now = Date.now();
-          aiMessage = {
-            id: `temp_ai_${now}`,
-            saveId: save.id,
-            roundIndex,
-            role: 'ai',
-            rawText: '',
-            segments: [],
-            status: 'streaming' as const,
-            createdAt: now,
-            updatedAt: now,
-          };
-        }
-
-        setMessages((prev) => [...prev, aiMessage]);
-        streamingMessageIdRef.current = aiMessage.id;
-        streamingBufferRef.current = '';
-
-        const chatMessages = buildChatContext(messages, userMessage, save);
-
-        const { controller, response } = createNonStreamingRequest(
+        const { userMessage, aiMessage, completion } = startBackgroundAIRequest({
+          saveId: save.id,
+          roundIndex,
+          userRawText: text,
+          chatMessages,
           apiEndpoint,
           apiKey,
           modelName,
-          chatMessages,
-          { temperature, topP },
-        );
+          temperature,
+          topP,
+        });
 
-        abortControllerRef.current = controller;
+        setMessages((prev) => [...prev, userMessage, aiMessage]);
+        setCurrentRound(roundIndex);
+        setLoadingState('sending');
+        streamingMessageIdRef.current = aiMessage.id;
 
-        let fullText: string;
-        try {
-          fullText = await response;
-        } catch (err: any) {
-          if (err.name !== 'AbortError') {
-            console.error('[GameView] API请求失败:', err);
-            try { await updateMessage(aiMessage.id, { status: 'error' }); } catch {}
-            setMessages((prev) => prev.map((m) => m.id === aiMessage.id ? { ...m, status: 'error' as const } : m));
-            setLoadingState('error');
-          }
-          return;
-        } finally {
+        completion.then(async () => {
+          const allMsgs = await getMessagesBySaveId(save.id);
+          setMessages(allMsgs);
+          setCurrentRound(roundIndex);
+          setLoadingState('idle');
+          checkAndTriggerCompression(roundIndex);
+        }).catch(() => {
+          setLoadingState('error');
+        }).finally(() => {
           streamingMessageIdRef.current = null;
           streamingBufferRef.current = '';
           abortControllerRef.current = null;
-        }
-
-        streamingBufferRef.current = fullText;
-        const { segments, isValid } = await parseWithFallback(aiMessage.id, fullText);
-
-        try {
-          await updateMessage(aiMessage.id, {
-            rawText: fullText,
-            segments: isValid ? segments : [],
-            status: 'completed',
-          });
-        } catch (dbError) {
-          console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
-        }
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === aiMessage.id
-              ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
-              : m,
-          ),
-        );
-
-        try {
-          await updateSave(save.id, {
-            metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
-          });
-        } catch (dbError) {
-          console.warn('[GameView] 更新保存失败:', dbError);
-        }
-
-        setLoadingState('idle');
-        checkAndTriggerCompression(roundIndex);
+        });
       } catch (err) {
         console.error('[GameView] handleSendMessage 异常:', err);
         setLoadingState('error');
@@ -388,6 +341,8 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         }
 
         case 'delete': {
+          const confirmed = window.confirm('确定要删除这条消息吗？');
+          if (!confirmed) break;
           setMessages((prev) => prev.filter((m) => m.id !== message.id));
           await deleteMessage(message.id);
           break;
@@ -1213,6 +1168,8 @@ handleSendMessageRef.current = handleSendMessage;
           apis={apis}
           selectedApiId={displayedApiId}
           onSelectApi={handleSelectApi}
+          savedText={inputDraft}
+          onTextChange={handleInputDraftChange}
         />
       </div>
 

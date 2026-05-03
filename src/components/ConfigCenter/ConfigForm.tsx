@@ -467,7 +467,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
                         ref={modelSelectRef}
                         value={showCustomModel ? '__custom__' : activeApi.modelName}
                         onChange={(e) => handleSelectModel(e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent min-h-[44px]"
+                        className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent min-h-[44px] overflow-hidden"
                       >
                         {!availableModels.some((m) => m === activeApi.modelName) && activeApi.modelName && !showCustomModel && (
                           <option value={activeApi.modelName}>{activeApi.modelName}</option>

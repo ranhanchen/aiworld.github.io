@@ -14,18 +14,23 @@ export function parseMessageSegments(rawText: string): {
     const trimmed = rawText.trim();
     const parsed: unknown = JSON.parse(trimmed);
 
-    if (!Array.isArray(parsed)) {
-      return { segments: [], isValid: false, error: '解析结果不是JSON数组' };
+    let items: unknown[];
+    if (Array.isArray(parsed)) {
+      items = parsed;
+    } else if (parsed && typeof parsed === 'object' && 'type' in parsed) {
+      items = [parsed];
+    } else {
+      return { segments: [], isValid: false, error: '解析结果不是JSON数组或消息对象' };
     }
 
-    if (parsed.length === 0) {
+    if (items.length === 0) {
       return { segments: [], isValid: false, error: '消息数组不能为空' };
     }
 
     const segments: MessageSegment[] = [];
 
-    for (let i = 0; i < parsed.length; i++) {
-      const item = parsed[i] as Record<string, unknown>;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i] as Record<string, unknown>;
 
       if (!item || typeof item !== 'object') {
         return { segments: [], isValid: false, error: `第${i + 1}个元素不是有效对象` };
@@ -65,6 +70,9 @@ export function parseMessageSegments(rawText: string): {
 }
 
 export function generateSaveTitle(metadata: SaveMetadata): string {
+  if (metadata.title && metadata.title.trim()) {
+    return metadata.title.trim();
+  }
   const name = metadata.configSnapshot.character.name;
   const world = metadata.configSnapshot.world.world;
   if (name && world) {
@@ -72,9 +80,6 @@ export function generateSaveTitle(metadata: SaveMetadata): string {
   }
   if (name) {
     return `${name}的冒险`;
-  }
-  if (metadata.title) {
-    return metadata.title;
   }
   return `未命名存档`;
 }

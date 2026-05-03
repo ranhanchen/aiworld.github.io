@@ -30,18 +30,23 @@ self.onmessage = (event: MessageEvent<ParseRequest>) => {
     const trimmed = rawText.trim();
     const parsed: unknown = JSON.parse(trimmed);
 
-    if (!Array.isArray(parsed)) {
+    let items: unknown[];
+    if (Array.isArray(parsed)) {
+      items = parsed;
+    } else if (parsed && typeof parsed === 'object' && 'type' in parsed) {
+      items = [parsed];
+    } else {
       const response: ParseResponse = {
         id,
         segments: [],
         isValid: false,
-        error: '解析结果不是JSON数组',
+        error: '解析结果不是JSON数组或消息对象',
       };
       self.postMessage(response);
       return;
     }
 
-    if (parsed.length === 0) {
+    if (items.length === 0) {
       const response: ParseResponse = {
         id,
         segments: [],
@@ -54,8 +59,8 @@ self.onmessage = (event: MessageEvent<ParseRequest>) => {
 
     const segments: MessageSegment[] = [];
 
-    for (let i = 0; i < parsed.length; i++) {
-      const item = parsed[i] as Record<string, unknown>;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i] as Record<string, unknown>;
 
       if (!item || typeof item !== 'object') {
         const response: ParseResponse = {
