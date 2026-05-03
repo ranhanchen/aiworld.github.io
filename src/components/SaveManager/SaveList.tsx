@@ -117,12 +117,21 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
         <p className="text-text-secondary dark:text-text-secondary-dark text-sm">
           暂无存档，开始你的冒险吧
         </p>
-        <button
-          onClick={onCreateNew}
-          className="px-4 py-2 bg-accent text-white rounded-lg text-sm hover:opacity-90 transition-opacity"
-        >
-          新建存档
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onCreateNew}
+            className="px-4 py-2 bg-accent text-white rounded-lg text-sm hover:opacity-90 transition-opacity"
+          >
+            新建存档
+          </button>
+          <button
+            onClick={() => setShowImportExport(!showImportExport)}
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-text-primary-dark rounded-lg text-sm hover:opacity-90 transition-opacity"
+          >
+            导入存档
+          </button>
+        </div>
+        {showImportExport && <ImportExport onComplete={loadSaves} />}
       </div>
     );
   }
@@ -144,7 +153,7 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
             onClick={() => setShowImportExport(!showImportExport)}
             className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-text-primary-dark rounded-lg text-xs hover:opacity-90 transition-opacity"
           >
-            导入/导出
+            导入
           </button>
           <button
             onClick={onCreateNew}

@@ -1,14 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Message } from '@/types/message';
 
 interface ContextMenuProps {
   message: Message;
+  isLastAiMessage: boolean;
   onAction: (action: string) => void;
   onClose: () => void;
 }
 
-export default function ContextMenu({ message, onAction, onClose }: ContextMenuProps) {
+export default function ContextMenu({ message, isLastAiMessage, onAction, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -34,13 +36,20 @@ export default function ContextMenu({ message, onAction, onClose }: ContextMenuP
 
   const isAiMessage = message.role === 'ai';
 
-  const menuItems: Array<{ id: string; label: string; icon: string; show: boolean; danger?: boolean }> = [
-    { id: 'copy', label: '复制文本', icon: '📋', show: true },
-    { id: 'edit', label: '编辑消息', icon: '✏️', show: true },
-    { id: 'delete', label: '删除消息', icon: '🗑️', show: true, danger: true },
-    { id: 'regenerate', label: '重新生成', icon: '🔄', show: isAiMessage },
-    { id: 'rewrite_longer', label: '详细重写', icon: '📝', show: isAiMessage },
-    { id: 'rewrite_shorter', label: '简略重写', icon: '✂️', show: isAiMessage },
+  const handleCopy = async () => {
+    onAction('copy');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const menuItems: Array<{ id: string; label: string; show: boolean; danger?: boolean }> = [
+    { id: 'copy', label: copied ? '已复制' : '复制文本', show: true },
+    { id: 'edit', label: '编辑消息', show: true },
+    { id: 'resend', label: '重新发送', show: !isAiMessage },
+    { id: 'delete', label: '删除消息', show: true, danger: true },
+    { id: 'regenerate', label: '重新生成', show: isAiMessage && isLastAiMessage },
+    { id: 'rewrite_longer', label: '详细重写', show: isAiMessage },
+    { id: 'rewrite_shorter', label: '简略重写', show: isAiMessage },
   ];
 
   return (
@@ -61,14 +70,19 @@ export default function ContextMenu({ message, onAction, onClose }: ContextMenuP
             .map((item) => (
               <button
                 key={item.id}
-                onClick={() => onAction(item.id)}
+                onClick={() => {
+                  if (item.id === 'copy') {
+                    handleCopy();
+                  } else {
+                    onAction(item.id);
+                  }
+                }}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[44px] ${
                   item.danger
                     ? 'text-red-500 hover:text-red-600'
                     : 'text-text-primary dark:text-text-primary-dark'
                 }`}
               >
-                <span className="text-base">{item.icon}</span>
                 <span>{item.label}</span>
               </button>
             ))}

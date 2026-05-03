@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Save } from '@/types/save';
-import type { Message } from '@/types/message';
+import type { Message, MessageSegment } from '@/types/message';
+import { getActiveApi } from '@/types/config';
 import { getMessagesBySaveId, createMessage, updateMessage, updateSave, deleteMessage, getMessagesByRoundRange } from '@/db/repository';
-import { createSSEConnection, createSystemPrompt } from '@/config/api';
-import { parseMessageSegments } from '@/utils/parsers';
+import { createNonStreamingRequest, createSystemPrompt } from '@/config/api';
 import { COMPRESSION_THRESHOLD, COMPRESSION_WINDOW_SIZE, CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
 import ParserWorker from '@/workers/parser.worker?worker';
 import CompressWorker from '@/workers/compress.worker?worker';
@@ -31,23 +31,50 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   const streamingBufferRef = useRef('');
   const streamingMessageIdRef = useRef<string | null>(null);
   const handleContinueStoryRef = useRef<() => Promise<void>>(async () => {});
+  const handleSendMessageRef = useRef<(text: string) => Promise<void>>(async () => {});
+  const selectedApiOverrideRef = useRef<string | null>(null);
+  const editingMessageRef = useRef<Message | null>(null);
 
   const getNetworkConfig = useCallback(() => {
     const config = save.metadata.configSnapshot;
     const network = config?.network;
-    const apiKey = network?.apiKey || '';
-    const apiEndpoint = network?.apiEndpoint || '';
+    if (!network) {
+      return { apiKey: '', apiEndpoint: '', modelName: '', temperature: 0.8, topP: 0.95 };
+    }
 
-    // If config from DB is missing key/endpoint, try localStorage backup
-    if ((!apiKey || !apiEndpoint) && save.id) {
+    const lookupNetwork = selectedApiOverrideRef.current
+      ? { ...network, selectedId: selectedApiOverrideRef.current }
+      : network;
+
+    const activeApi = getActiveApi(lookupNetwork);
+
+    if (activeApi) {
+      return {
+        apiKey: activeApi.apiKey || '',
+        apiEndpoint: activeApi.apiEndpoint || '',
+        modelName: activeApi.modelName || '',
+        temperature: activeApi.temperature ?? 0.8,
+        topP: activeApi.topP ?? 0.95,
+      };
+    }
+
+    if (save.id) {
       try {
         const raw = localStorage.getItem(`save_backup_${save.id}`);
         if (raw) {
           const backup: Save = JSON.parse(raw);
           const backupNetwork = backup.metadata?.configSnapshot?.network;
-          if (backupNetwork?.apiKey && backupNetwork?.apiEndpoint) {
-            console.log('[GameView] 从 localStorage 备份中恢复网络配置');
-            return { apiKey: backupNetwork.apiKey, apiEndpoint: backupNetwork.apiEndpoint, modelName: backupNetwork.modelName || '', temperature: backupNetwork.temperature ?? 0.8, topP: backupNetwork.topP ?? 0.95 };
+          if (backupNetwork) {
+            const backupApi = getActiveApi(backupNetwork);
+            if (backupApi?.apiKey) {
+              return {
+                apiKey: backupApi.apiKey,
+                apiEndpoint: backupApi.apiEndpoint || '',
+                modelName: backupApi.modelName || '',
+                temperature: backupApi.temperature ?? 0.8,
+                topP: backupApi.topP ?? 0.95,
+              };
+            }
           }
         }
       } catch (e) {
@@ -55,20 +82,44 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       }
     }
 
-    return { apiKey, apiEndpoint, modelName: network?.modelName || '', temperature: network?.temperature ?? 0.8, topP: network?.topP ?? 0.95 };
+    return { apiKey: '', apiEndpoint: '', modelName: '', temperature: 0.8, topP: 0.95 };
   }, [save]);
+
+  const networkConfig = save.metadata.configSnapshot?.network;
+  const apis = networkConfig?.apis || [];
+  const selectedApiId = networkConfig?.selectedId || '';
+  const [displayedApiId, setDisplayedApiId] = useState(selectedApiId);
+
+  const handleSelectApi = useCallback(
+    async (apiId: string) => {
+      if (!networkConfig) return;
+      setDisplayedApiId(apiId);
+      selectedApiOverrideRef.current = apiId;
+      const updatedNetwork = { ...networkConfig, selectedId: apiId };
+      try {
+        await updateSave(save.id, {
+          metadata: {
+            configSnapshot: {
+              ...(save.metadata.configSnapshot || {} as any),
+              network: updatedNetwork,
+            },
+          },
+        });
+      } catch (e) {
+        console.warn('[GameView] 更新API选择失败:', e);
+      }
+    },
+    [save.id, save.metadata.configSnapshot, networkConfig],
+  );
 
   const loadInitialMessages = useCallback(async () => {
     setLoadingState('loading');
     try {
       const msgs = await getMessagesBySaveId(save.id, CONTEXT_WINDOW_SIZE * 2);
-      console.log('[GameView] loadInitialMessages 加载消息:', {
+      console.log('[GameView] loadInitialMessages:', {
         saveId: save.id,
         roundCount: save.metadata.roundCount,
-        CONTEXT_WINDOW_SIZE,
-        limit: CONTEXT_WINDOW_SIZE * 2,
-        消息数量: msgs.length,
-        消息详情: msgs.map(m => ({ id: m.id, role: m.role, roundIndex: m.roundIndex, rawText: m.rawText.substring(0, 30) })),
+        msgCount: msgs.length,
       });
       setMessages(msgs);
       setHasMoreMessages(msgs.length >= CONTEXT_WINDOW_SIZE * 2);
@@ -82,6 +133,10 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   useEffect(() => {
     loadInitialMessages();
   }, [loadInitialMessages]);
+
+  useEffect(() => {
+    editingMessageRef.current = editingMessage;
+  }, [editingMessage]);
 
   const handleLoadMore = useCallback(async (): Promise<boolean> => {
     if (messages.length === 0) return false;
@@ -114,24 +169,11 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     async (text: string) => {
       const { apiEndpoint, apiKey, modelName, temperature, topP } = getNetworkConfig();
 
-      console.log('[GameView] handleSendMessage 网络配置:', {
-        apiEndpoint: apiEndpoint?.substring(0, 40),
-        apiKey: apiKey ? `***${apiKey.slice(-4)}` : '(空)',
-        modelName,
-      });
-
       if (!apiKey || !apiKey.trim() || !apiEndpoint || !apiEndpoint.trim()) {
         setLoadingState('error');
-        console.warn('[GameView] 发送失败：API Key 或 Endpoint 为空');
         return;
       }
       if (loadingState === 'sending') return;
-
-      console.log('[GameView] handleSendMessage 开始发送，文本:', text.substring(0, 50), {
-        currentRound,
-        newRoundIndex: currentRound + 1,
-        saveId: save.id,
-      });
 
       try {
         const roundIndex = currentRound + 1;
@@ -178,11 +220,6 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
             segments: [],
             status: 'streaming',
           });
-          console.log('[GameView] AI消息创建成功:', {
-            aiMessageId: aiMessage.id,
-            saveId: aiMessage.saveId,
-            roundIndex: aiMessage.roundIndex,
-          });
         } catch (dbError) {
           console.warn('[GameView] AI消息写入数据库失败，使用内存临时消息:', dbError);
           // 生成一个临时消息对象用于内存显示
@@ -206,7 +243,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
         const chatMessages = buildChatContext(messages, userMessage, save);
 
-        const controller = createSSEConnection(
+        const { controller, response } = createNonStreamingRequest(
           apiEndpoint,
           apiKey,
           modelName,
@@ -216,132 +253,79 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
         abortControllerRef.current = controller;
 
-        const handleToken = (e: Event) => {
-          const content = (e as CustomEvent<{ content: string }>).detail.content;
-          streamingBufferRef.current += content;
+        try {
+          const fullText = await response;
+          streamingBufferRef.current = fullText;
 
-          const result = parseMessageSegments(streamingBufferRef.current);
-          if (result.isValid && result.segments.length > 0) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? { ...m, segments: result.segments, rawText: streamingBufferRef.current }
-                  : m,
-              ),
-            );
-          }
-        };
-
-        const handleComplete = async () => {
-          cleanup();
-          const finalBuffer = streamingBufferRef.current;
+          const parserWorker = new ParserWorker();
+          const { segments, isValid } = await new Promise<{ segments: MessageSegment[]; isValid: boolean }>((resolve, reject) => {
+            parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
+            parserWorker.onerror = (err) => reject(err);
+            parserWorker.postMessage({ id: aiMessage.id, rawText: fullText });
+          });
 
           try {
-            const parserWorker = new ParserWorker();
-            const { segments, isValid } = await new Promise<{ segments: any[], isValid: boolean }>((resolve, reject) => {
-              parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
-              parserWorker.onerror = (err) => reject(err);
-              parserWorker.postMessage({ id: aiMessage.id, rawText: finalBuffer });
+            await updateMessage(aiMessage.id, {
+              rawText: fullText,
+              segments: isValid ? segments : [],
+              status: 'completed',
             });
-
-            // 尝试更新数据库中的消息
-            try {
-              await updateMessage(aiMessage.id, {
-                rawText: finalBuffer,
-                segments: isValid ? segments : [],
-                status: 'completed',
-              });
-            } catch (dbError) {
-              console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
-            }
-
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? {
-                      ...m,
-                      rawText: finalBuffer,
-                      segments: isValid ? segments : [],
-                      status: 'completed' as const,
-                    }
-                  : m,
-              ),
-            );
-
-            try {
-              await updateSave(save.id, {
-                metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
-              });
-            } catch (dbError) {
-              console.warn('[GameView] 更新保存失败:', dbError);
-            }
-          } catch (parseError) {
-            console.error('Parser worker error:', parseError);
-            // 即使解析失败也完成显示
-            try {
-              await updateMessage(aiMessage.id, { status: 'completed', rawText: finalBuffer, segments: [] });
-            } catch {}
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? { ...m, status: 'completed' as const, rawText: finalBuffer, segments: [] }
-                  : m,
-              ),
-            );
+          } catch (dbError) {
+            console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
           }
-
-          streamingMessageIdRef.current = null;
-          streamingBufferRef.current = '';
-          setLoadingState('idle');
-
-          checkAndTriggerCompression(roundIndex);
-        };
-
-        const handleError = (e: Event) => {
-          cleanup();
-          const detail = (e as CustomEvent<{ status: number; message: string }>).detail;
-
-          try {
-            updateMessage(aiMessage.id, { status: 'error' });
-          } catch {}
 
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === aiMessage.id ? { ...m, status: 'error' as const } : m,
+              m.id === aiMessage.id
+                ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+                : m,
             ),
           );
 
-          console.error('SSE Error:', detail);
+          try {
+            await updateSave(save.id, {
+              metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
+            });
+          } catch (dbError) {
+            console.warn('[GameView] 更新保存失败:', dbError);
+          }
+
+          checkAndTriggerCompression(roundIndex);
+        } catch (err: any) {
+          if (err.name !== 'AbortError') {
+            console.error('[GameView] 非流式请求失败:', err);
+            try {
+              await updateMessage(aiMessage.id, { status: 'error' });
+            } catch {}
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id ? { ...m, status: 'error' as const } : m,
+              ),
+            );
+            setLoadingState('error');
+            return;
+          }
+        } finally {
           streamingMessageIdRef.current = null;
           streamingBufferRef.current = '';
-          setLoadingState('error');
-        };
-
-        const cleanup = () => {
-          if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-          }
-          window.removeEventListener('sse-token', handleToken);
-          window.removeEventListener('sse-complete', handleComplete);
-          window.removeEventListener('sse-error', handleError);
-        };
-
-        window.addEventListener('sse-token', handleToken);
-        window.addEventListener('sse-complete', handleComplete);
-        window.addEventListener('sse-error', handleError);
+          setLoadingState('idle');
+          abortControllerRef.current = null;
+        }
       } catch (err) {
         console.error('[GameView] handleSendMessage 异常:', err);
-        // 只在真正的 API 错误时显示错误提示
-        if (String(err).includes('SSE') || String(err).includes('fetch')) {
-          setLoadingState('error');
-        }
+        setLoadingState('error');
         streamingMessageIdRef.current = null;
         streamingBufferRef.current = '';
       }
     },
     [currentRound, save, messages, loadingState, getNetworkConfig],
   );
+
+  const isLastAiMessage = useMemo(() => {
+    const aiMsgs = messages.filter((m) => m.role === 'ai');
+    if (aiMsgs.length === 0) return false;
+    return aiMsgs[aiMsgs.length - 1].id === contextMenuTarget?.id;
+  }, [messages, contextMenuTarget]);
 
   const handleContextMenuAction = useCallback(
     async (action: string, message: Message) => {
@@ -370,6 +354,33 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           break;
         }
 
+        case 'resend': {
+          if (message.role !== 'user') break;
+
+          const confirmed = window.confirm(
+            '重新发送将删除此消息及之后的所有消息，并重新调用AI生成。确定要继续吗？'
+          );
+          if (!confirmed) break;
+
+          const targetIndex = messages.findIndex((m) => m.id === message.id);
+          if (targetIndex === -1) break;
+
+          const messagesToRemove = messages.slice(targetIndex);
+          for (const m of messagesToRemove) {
+            try { await deleteMessage(m.id); } catch {}
+          }
+
+          const keptMessages = messages.slice(0, targetIndex);
+          setMessages(keptMessages);
+          setCurrentRound(message.roundIndex);
+          setLoadingState('idle');
+
+          setTimeout(() => {
+            handleSendMessageRef.current(message.rawText);
+          }, 100);
+          break;
+        }
+
         case 'delete': {
           setMessages((prev) => prev.filter((m) => m.id !== message.id));
           await deleteMessage(message.id);
@@ -383,24 +394,14 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
             (m) => m.roundIndex === message.roundIndex && m.role === 'user',
           );
 
-          console.log('[GameView] 重新生成：查找用户消息', {
-            aiMessageRoundIndex: message.roundIndex,
-            foundUserMsg: !!userMsg,
-          });
-
-          // 过滤掉当前消息及后续消息
           const filteredMessages = messages.filter((m) => m.roundIndex < message.roundIndex);
 
           await deleteMessage(message.id);
           setMessages(filteredMessages);
 
           if (userMsg) {
-            // 有用户消息，使用过滤后的消息列表和用户消息重新生成
-            console.log('[GameView] 重新生成：找到用户消息', { userMsgId: userMsg.id, rawText: userMsg.rawText.substring(0, 50) });
             handleRegenerateWithUserMessage(filteredMessages, userMsg, save);
           } else {
-            // 没有用户消息，这是继续按钮生成的消息，使用过滤后的消息列表重新生成
-            console.log('[GameView] 重新生成：没有用户消息，使用继续上下文');
             handleRegenerateContinue(filteredMessages, save);
           }
           break;
@@ -432,10 +433,11 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
           const chatMessages = buildRewriteContext(messages, message, save, instruction);
 
-          const controller = createSSEConnection(
-            save.metadata.configSnapshot.network.apiEndpoint,
-            save.metadata.configSnapshot.network.apiKey,
-            save.metadata.configSnapshot.network.modelName,
+          const network = getNetworkConfig();
+          const { controller, response } = createNonStreamingRequest(
+            network.apiEndpoint,
+            network.apiKey,
+            network.modelName,
             chatMessages,
           );
           abortControllerRef.current = controller;
@@ -443,74 +445,42 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           streamingMessageIdRef.current = message.id;
           streamingBufferRef.current = '';
 
-          let rewriteCleanup: (() => void) | null = null;
-
-          rewriteCleanup = () => {
-            window.removeEventListener('sse-token', rewriteHandleToken);
-            window.removeEventListener('sse-complete', rewriteHandleComplete);
-            window.removeEventListener('sse-error', rewriteHandleError);
-          };
-
-          const rewriteHandleToken = (e: Event) => {
-            const content = (e as CustomEvent<{ content: string }>).detail.content;
-            streamingBufferRef.current += content;
-          };
-
-          const rewriteHandleComplete = () => {
-            rewriteCleanup?.();
-            const finalBuffer = streamingBufferRef.current;
+          try {
+            const fullText = await response;
+            streamingBufferRef.current = fullText;
 
             const rewriteParserWorker = new ParserWorker();
-            rewriteParserWorker.onmessage = (workerEvent: MessageEvent) => {
-              const { segments, isValid } = workerEvent.data;
+            const { segments, isValid } = await new Promise<{ segments: MessageSegment[]; isValid: boolean }>((resolve, reject) => {
+              rewriteParserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
+              rewriteParserWorker.onerror = (err) => reject(err);
+              rewriteParserWorker.postMessage({ id: message.id, rawText: fullText });
+            });
 
-              updateMessage(message.id, {
-                rawText: finalBuffer,
-                segments: isValid ? segments : [],
-                status: 'completed',
-              });
+            updateMessage(message.id, {
+              rawText: fullText,
+              segments: isValid ? segments : [],
+              status: 'completed',
+            });
 
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === message.id
-                    ? {
-                        ...m,
-                        rawText: finalBuffer,
-                        segments: isValid ? segments : [],
-                        status: 'completed' as const,
-                      }
-                    : m,
-                ),
-              );
-
-              streamingMessageIdRef.current = null;
-              streamingBufferRef.current = '';
-              setLoadingState('idle');
-              abortControllerRef.current = null;
-            };
-
-            rewriteParserWorker.onerror = (err) => {
-              console.error('Rewrite parser worker error:', err);
-              streamingMessageIdRef.current = null;
-              streamingBufferRef.current = '';
-              setLoadingState('idle');
-              abortControllerRef.current = null;
-            };
-
-            rewriteParserWorker.postMessage({ id: message.id, rawText: finalBuffer });
-          };
-
-          const rewriteHandleError = () => {
-            rewriteCleanup?.();
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === message.id
+                  ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+                  : m,
+              ),
+            );
+          } catch (err: any) {
+            if (err.name !== 'AbortError') {
+              console.error('[GameView] 改写请求失败:', err);
+              setLoadingState('error');
+              return;
+            }
+          } finally {
             streamingMessageIdRef.current = null;
             streamingBufferRef.current = '';
-            setLoadingState('error');
+            setLoadingState('idle');
             abortControllerRef.current = null;
-          };
-
-          window.addEventListener('sse-token', rewriteHandleToken);
-          window.addEventListener('sse-complete', rewriteHandleComplete);
-          window.addEventListener('sse-error', rewriteHandleError);
+          }
           break;
         }
       }
@@ -570,7 +540,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
         const chatMessages = buildChatContext(filteredMessages, userMsg, save);
 
-        const controller = createSSEConnection(
+        const { controller, response } = createNonStreamingRequest(
           apiEndpoint,
           apiKey,
           modelName,
@@ -580,96 +550,62 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
         abortControllerRef.current = controller;
 
-        const handleToken = (e: Event) => {
-          const content = (e as CustomEvent<{ content: string }>).detail.content;
-          streamingBufferRef.current += content;
+        try {
+          const fullText = await response;
+          streamingBufferRef.current = fullText;
 
-          const result = parseMessageSegments(streamingBufferRef.current);
-          if (result.isValid && result.segments.length > 0) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? { ...m, segments: result.segments, rawText: streamingBufferRef.current }
-                  : m,
-              ),
-            );
-          }
-        };
-
-        const handleComplete = async () => {
-          cleanup();
-          const finalBuffer = streamingBufferRef.current;
+          const parserWorker = new ParserWorker();
+          const { segments, isValid } = await new Promise<{ segments: MessageSegment[]; isValid: boolean }>((resolve, reject) => {
+            parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
+            parserWorker.onerror = (err) => reject(err);
+            parserWorker.postMessage({ id: aiMessage.id, rawText: fullText });
+          });
 
           try {
-            const parserWorker = new ParserWorker();
-            const { segments, isValid } = await new Promise<{ segments: any[], isValid: boolean }>((resolve, reject) => {
-              parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
-              parserWorker.onerror = (err) => reject(err);
-              parserWorker.postMessage({ id: aiMessage.id, rawText: finalBuffer });
+            await updateMessage(aiMessage.id, {
+              rawText: fullText,
+              segments: isValid ? segments : [],
+              status: 'completed',
             });
-
-            try {
-              await updateMessage(aiMessage.id, {
-                rawText: finalBuffer,
-                segments: isValid ? segments : [],
-                status: 'completed',
-              });
-            } catch (dbError) {
-              console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
-            }
-
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? {
-                      ...m,
-                      rawText: finalBuffer,
-                      segments: isValid ? segments : [],
-                      status: 'completed' as const,
-                    }
-                  : m,
-              ),
-            );
-
-            try {
-              await updateSave(save.id, {
-                metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
-              });
-            } catch (dbError) {
-              console.warn('[GameView] 更新保存失败:', dbError);
-            }
-          } catch (parseError) {
-            console.error('Parser worker error:', parseError);
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? { ...m, rawText: finalBuffer, status: 'completed' as const }
-                  : m,
-              ),
-            );
+          } catch (dbError) {
+            console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
           }
 
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id
+                ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+                : m,
+            ),
+          );
+
+          try {
+            await updateSave(save.id, {
+              metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
+            });
+          } catch (dbError) {
+            console.warn('[GameView] 更新保存失败:', dbError);
+          }
+        } catch (err: any) {
+          if (err.name !== 'AbortError') {
+            console.error('[GameView] 非流式请求失败:', err);
+            try {
+              await updateMessage(aiMessage.id, { status: 'error' });
+            } catch {}
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id ? { ...m, status: 'error' as const } : m,
+              ),
+            );
+            setLoadingState('error');
+            return;
+          }
+        } finally {
           setLoadingState('idle');
           streamingMessageIdRef.current = null;
-        };
-
-        const handleError = () => {
-          cleanup();
-          setLoadingState('error');
-          streamingMessageIdRef.current = null;
           streamingBufferRef.current = '';
-        };
-
-        const cleanup = () => {
-          abortControllerRef.current?.abort();
-          window.removeEventListener('sse-token', handleToken);
-          window.removeEventListener('sse-complete', handleComplete);
-          window.removeEventListener('sse-error', handleError);
-        };
-
-        window.addEventListener('sse-token', handleToken);
-        window.addEventListener('sse-complete', handleComplete);
-        window.addEventListener('sse-error', handleError);
+          abortControllerRef.current = null;
+        }
       } catch (err) {
         console.error('[GameView] handleRegenerateWithUserMessage 异常:', err);
         setLoadingState('error');
@@ -733,7 +669,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
         const chatMessages = buildContinueContext(filteredMessages, save);
 
-        const controller = createSSEConnection(
+        const { controller, response } = createNonStreamingRequest(
           apiEndpoint,
           apiKey,
           modelName,
@@ -743,96 +679,62 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
         abortControllerRef.current = controller;
 
-        const handleToken = (e: Event) => {
-          const content = (e as CustomEvent<{ content: string }>).detail.content;
-          streamingBufferRef.current += content;
+        try {
+          const fullText = await response;
+          streamingBufferRef.current = fullText;
 
-          const result = parseMessageSegments(streamingBufferRef.current);
-          if (result.isValid && result.segments.length > 0) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? { ...m, segments: result.segments, rawText: streamingBufferRef.current }
-                  : m,
-              ),
-            );
-          }
-        };
-
-        const handleComplete = async () => {
-          cleanup();
-          const finalBuffer = streamingBufferRef.current;
+          const parserWorker = new ParserWorker();
+          const { segments, isValid } = await new Promise<{ segments: MessageSegment[]; isValid: boolean }>((resolve, reject) => {
+            parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
+            parserWorker.onerror = (err) => reject(err);
+            parserWorker.postMessage({ id: aiMessage.id, rawText: fullText });
+          });
 
           try {
-            const parserWorker = new ParserWorker();
-            const { segments, isValid } = await new Promise<{ segments: any[], isValid: boolean }>((resolve, reject) => {
-              parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
-              parserWorker.onerror = (err) => reject(err);
-              parserWorker.postMessage({ id: aiMessage.id, rawText: finalBuffer });
+            await updateMessage(aiMessage.id, {
+              rawText: fullText,
+              segments: isValid ? segments : [],
+              status: 'completed',
             });
-
-            try {
-              await updateMessage(aiMessage.id, {
-                rawText: finalBuffer,
-                segments: isValid ? segments : [],
-                status: 'completed',
-              });
-            } catch (dbError) {
-              console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
-            }
-
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? {
-                      ...m,
-                      rawText: finalBuffer,
-                      segments: isValid ? segments : [],
-                      status: 'completed' as const,
-                    }
-                  : m,
-              ),
-            );
-
-            try {
-              await updateSave(save.id, {
-                metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
-              });
-            } catch (dbError) {
-              console.warn('[GameView] 更新保存失败:', dbError);
-            }
-          } catch (parseError) {
-            console.error('Parser worker error:', parseError);
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMessage.id
-                  ? { ...m, rawText: finalBuffer, status: 'completed' as const }
-                  : m,
-              ),
-            );
+          } catch (dbError) {
+            console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
           }
 
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id
+                ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+                : m,
+            ),
+          );
+
+          try {
+            await updateSave(save.id, {
+              metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
+            });
+          } catch (dbError) {
+            console.warn('[GameView] 更新保存失败:', dbError);
+          }
+        } catch (err: any) {
+          if (err.name !== 'AbortError') {
+            console.error('[GameView] 非流式请求失败:', err);
+            try {
+              await updateMessage(aiMessage.id, { status: 'error' });
+            } catch {}
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id ? { ...m, status: 'error' as const } : m,
+              ),
+            );
+            setLoadingState('error');
+            return;
+          }
+        } finally {
           setLoadingState('idle');
           streamingMessageIdRef.current = null;
-        };
-
-        const handleError = () => {
-          cleanup();
-          setLoadingState('error');
-          streamingMessageIdRef.current = null;
           streamingBufferRef.current = '';
-        };
-
-        const cleanup = () => {
-          abortControllerRef.current?.abort();
-          window.removeEventListener('sse-token', handleToken);
-          window.removeEventListener('sse-complete', handleComplete);
-          window.removeEventListener('sse-error', handleError);
-        };
-
-        window.addEventListener('sse-token', handleToken);
-        window.addEventListener('sse-complete', handleComplete);
-        window.addEventListener('sse-error', handleError);
+          abortControllerRef.current = null;
+        }
       } catch (err) {
         console.error('[GameView] handleRegenerateContinue 异常:', err);
         setLoadingState('error');
@@ -867,14 +769,15 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           });
         });
 
-        const response = await fetch(save.metadata.configSnapshot.network.apiEndpoint, {
+        const network = getNetworkConfig();
+        const response = await fetch(network.apiEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${save.metadata.configSnapshot.network.apiKey}`,
+            Authorization: `Bearer ${network.apiKey}`,
           },
           body: JSON.stringify({
-            model: save.metadata.configSnapshot.network.modelName,
+            model: network.modelName,
             messages: [{ role: 'user', content: compressionPrompt }],
             temperature: 0.5,
           }),
@@ -964,7 +867,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
       const chatMessages = buildContinueContext(messages, save);
 
-      const controller = createSSEConnection(
+      const { controller, response } = createNonStreamingRequest(
         apiEndpoint,
         apiKey,
         modelName,
@@ -974,175 +877,285 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
       abortControllerRef.current = controller;
 
-      const handleToken = (e: Event) => {
-        const content = (e as CustomEvent<{ content: string }>).detail.content;
-        streamingBufferRef.current += content;
+      try {
+        const fullText = await response;
+        streamingBufferRef.current = fullText;
 
-        const result = parseMessageSegments(streamingBufferRef.current);
-        if (result.isValid && result.segments.length > 0) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMessage.id
-                ? { ...m, segments: result.segments, rawText: streamingBufferRef.current }
-                : m,
-            ),
-          );
-        }
-      };
-
-      const handleComplete = async () => {
-        cleanup();
-        const finalBuffer = streamingBufferRef.current;
+        const parserWorker = new ParserWorker();
+        const { segments, isValid } = await new Promise<{ segments: MessageSegment[]; isValid: boolean }>((resolve, reject) => {
+          parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
+          parserWorker.onerror = (err) => reject(err);
+          parserWorker.postMessage({ id: aiMessage.id, rawText: fullText });
+        });
 
         try {
-          const parserWorker = new ParserWorker();
-          const { segments, isValid } = await new Promise<{ segments: any[], isValid: boolean }>((resolve, reject) => {
-            parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
-            parserWorker.onerror = (err) => reject(err);
-            parserWorker.postMessage({ id: aiMessage.id, rawText: finalBuffer });
+          await updateMessage(aiMessage.id, {
+            rawText: fullText,
+            segments: isValid ? segments : [],
+            status: 'completed',
           });
-
-          try {
-            await updateMessage(aiMessage.id, {
-              rawText: finalBuffer,
-              segments: isValid ? segments : [],
-              status: 'completed',
-            });
-          } catch (dbError) {
-            console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
-          }
-
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMessage.id
-                ? {
-                    ...m,
-                    rawText: finalBuffer,
-                    segments: isValid ? segments : [],
-                    status: 'completed' as const,
-                  }
-                : m,
-            ),
-          );
-
-          try {
-            await updateSave(save.id, {
-              metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
-            });
-          } catch (dbError) {
-            console.warn('[GameView] 更新保存失败:', dbError);
-          }
-        } catch (parseError) {
-          console.error('Continue parser worker error:', parseError);
-          try {
-            await updateMessage(aiMessage.id, { status: 'completed', rawText: finalBuffer, segments: [] });
-          } catch {}
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMessage.id
-                ? { ...m, status: 'completed' as const, rawText: finalBuffer, segments: [] }
-                : m,
-            ),
-          );
+        } catch (dbError) {
+          console.warn('[GameView] 更新AI消息到数据库失败:', dbError);
         }
-
-        streamingMessageIdRef.current = null;
-        streamingBufferRef.current = '';
-        setLoadingState('idle');
-
-        checkAndTriggerCompression(roundIndex);
-      };
-
-      const handleError = (e: Event) => {
-        cleanup();
-        const detail = (e as CustomEvent<{ status: number; message: string }>).detail;
-
-        try {
-          updateMessage(aiMessage.id, { status: 'error' });
-        } catch {}
 
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === aiMessage.id ? { ...m, status: 'error' as const } : m,
+            m.id === aiMessage.id
+              ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+              : m,
           ),
         );
 
-        console.error('Continue SSE Error:', detail);
+        try {
+          await updateSave(save.id, {
+            metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() },
+          });
+        } catch (dbError) {
+          console.warn('[GameView] 更新保存失败:', dbError);
+        }
+
+        checkAndTriggerCompression(roundIndex);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('[GameView] 非流式请求失败:', err);
+          try {
+            await updateMessage(aiMessage.id, { status: 'error' });
+          } catch {}
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id ? { ...m, status: 'error' as const } : m,
+            ),
+          );
+          setLoadingState('error');
+          return;
+        }
+      } finally {
         streamingMessageIdRef.current = null;
         streamingBufferRef.current = '';
-        setLoadingState('error');
-      };
-
-      const cleanup = () => {
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-          abortControllerRef.current = null;
-        }
-        window.removeEventListener('sse-token', handleToken);
-        window.removeEventListener('sse-complete', handleComplete);
-        window.removeEventListener('sse-error', handleError);
-      };
-
-      window.addEventListener('sse-token', handleToken);
-      window.addEventListener('sse-complete', handleComplete);
-      window.addEventListener('sse-error', handleError);
+        setLoadingState('idle');
+        abortControllerRef.current = null;
+      }
     } catch (err) {
       console.error('[GameView] handleContinueStory 异常:', err);
-      // 只在真正的 API 错误时显示错误提示
-      if (String(err).includes('SSE') || String(err).includes('fetch')) {
-        setLoadingState('error');
-      }
+      setLoadingState('error');
       streamingMessageIdRef.current = null;
       streamingBufferRef.current = '';
     }
   }, [currentRound, save, messages, loadingState, getNetworkConfig]);
 
-  const handleEditSave = useCallback(async (editedText: string) => {
-    if (!editingMessage) return;
+  const handleRegenerateAfterEdit = useCallback(
+    async (editedText: string) => {
+      const target = editingMessageRef.current;
+      if (!target) return;
 
-    console.log('[GameView] handleEditSave 开始保存编辑:', {
-      messageId: editingMessage.id,
-      role: editingMessage.role,
-      editedTextLength: editedText.length,
-    });
+      const { apiEndpoint, apiKey, modelName, temperature, topP } = getNetworkConfig();
+      if (!apiKey || !apiKey.trim() || !apiEndpoint || !apiEndpoint.trim()) {
+        setLoadingState('error');
+        return;
+      }
+      if (loadingState === 'sending') return;
 
-    try {
-      await updateMessage(editingMessage.id, {
-        rawText: editedText,
-      });
+      const roundIndex = target.roundIndex;
 
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === editingMessage.id
-            ? { ...m, rawText: editedText }
-            : m,
-        ),
-      );
+      try {
+        setLoadingState('sending');
 
-      console.log('[GameView] handleEditSave 保存成功');
+        let aiMessage: Message;
+        try {
+          aiMessage = await createMessage({
+            saveId: save.id,
+            roundIndex,
+            role: 'ai',
+            rawText: '',
+            segments: [],
+            status: 'streaming',
+          });
+        } catch (dbError) {
+          console.warn('[GameView] 编辑后AI消息写入DB失败，使用内存:', dbError);
+          const now = Date.now();
+          aiMessage = {
+            id: `temp_edit_ai_${now}`,
+            saveId: save.id,
+            roundIndex,
+            role: 'ai',
+            rawText: '',
+            segments: [],
+            status: 'streaming' as const,
+            createdAt: now,
+            updatedAt: now,
+          };
+        }
 
-      if (editingMessage.role === 'user') {
-        console.log('[GameView] 用户消息已编辑，将触发重新生成AI回复');
-        const aiMsg = messages.find(
-          (m) => m.roundIndex === editingMessage.roundIndex && m.role === 'ai',
+        setMessages((prev) => [...prev, aiMessage]);
+        streamingMessageIdRef.current = aiMessage.id;
+        streamingBufferRef.current = '';
+
+        // 使用编辑前该回合之前的所有消息构建上下文
+        const contextMessages = messages.filter(
+          (m) => m.roundIndex < roundIndex,
         );
+        const chatMessages = buildChatContext(contextMessages, { ...target, rawText: editedText }, save);
 
-        if (aiMsg) {
-          await deleteMessage(aiMsg.id);
-          setMessages((prev) => prev.filter((m) => m.id !== aiMsg.id));
+        const { controller, response } = createNonStreamingRequest(
+          apiEndpoint, apiKey, modelName, chatMessages, { temperature, topP },
+        );
+        abortControllerRef.current = controller;
+
+        try {
+          const fullText = await response;
+          streamingBufferRef.current = fullText;
+
+          const parserWorker = new ParserWorker();
+          const { segments, isValid } = await new Promise<{ segments: MessageSegment[]; isValid: boolean }>(
+            (resolve, reject) => {
+              parserWorker.onmessage = (ev: MessageEvent) => resolve(ev.data);
+              parserWorker.onerror = reject;
+              parserWorker.postMessage({ id: aiMessage.id, rawText: fullText });
+            },
+          );
+          try {
+            await updateMessage(aiMessage.id, {
+              rawText: fullText,
+              segments: isValid ? segments : [],
+              status: 'completed',
+            });
+          } catch (dbError) {
+            console.warn('[GameView] 编辑后更新AI消息DB失败:', dbError);
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id
+                ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+                : m,
+            ),
+          );
+          try {
+            await updateSave(save.id, { metadata: { roundCount: roundIndex, lastPlayedAt: Date.now() } });
+          } catch (dbError) {
+            console.warn('[GameView] 更新保存失败:', dbError);
+          }
+        } catch (err: any) {
+          if (err.name !== 'AbortError') {
+            console.error('[GameView] 非流式请求失败:', err);
+            try {
+              await updateMessage(aiMessage.id, { status: 'error' });
+            } catch {}
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id ? { ...m, status: 'error' as const } : m,
+              ),
+            );
+            setLoadingState('error');
+            return;
+          }
+        } finally {
+          setLoadingState('idle');
+          streamingMessageIdRef.current = null;
+          streamingBufferRef.current = '';
+          abortControllerRef.current = null;
+        }
+      } catch (err) {
+        console.error('[GameView] handleRegenerateAfterEdit 异常:', err);
+        setLoadingState('error');
+        streamingMessageIdRef.current = null;
+        streamingBufferRef.current = '';
+      }
+    },
+    [save, messages, loadingState, getNetworkConfig],
+  );
+
+  const parseEditedTextToSegments = useCallback(
+    (text: string, oldSegments: MessageSegment[]): MessageSegment[] => {
+      const blocks = text.split(/\n\n+/).filter(b => b.trim());
+
+      return blocks.map((block, idx) => {
+        const trimmed = block.trim();
+        const oldSeg = oldSegments[idx];
+
+        const matchScene = trimmed.match(/^\[场景\]\s*(.+)/s);
+        if (matchScene) {
+          return { type: 'scene' as const, content: matchScene[1].trim() };
+        }
+
+        const matchSystem = trimmed.match(/^\[系统\]\s*(.+)/s);
+        if (matchSystem) {
+          return { type: 'system' as const, content: matchSystem[1].trim() };
+        }
+
+        const matchAction = trimmed.match(/^\*(.+)\*$/s);
+        if (matchAction) {
+          return { type: 'action' as const, content: matchAction[1].trim() };
+        }
+
+        const matchDialogue = trimmed.match(/^【(.+?)】\s*(.+)/s);
+        if (matchDialogue) {
+          return { type: 'dialogue' as const, speaker: matchDialogue[1], content: matchDialogue[2].trim() };
+        }
+
+        return oldSeg
+          ? { ...oldSeg, content: trimmed }
+          : { type: (oldSegments[0]?.type || 'scene') as MessageSegment['type'], content: trimmed };
+      });
+    },
+    [],
+  );
+
+  const handleEditSave = useCallback(
+    async (editedText: string) => {
+      const target = editingMessageRef.current;
+      if (!target) return;
+
+      try {
+        if (target.role === 'ai') {
+          const oldSegments = target.segments || [];
+          const updatedSegments = parseEditedTextToSegments(editedText, oldSegments);
+
+          await updateMessage(target.id, {
+            rawText: editedText,
+            segments: updatedSegments,
+          });
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === target.id
+                ? { ...m, rawText: editedText, segments: updatedSegments }
+                : m,
+            ),
+          );
+        } else {
+          await updateMessage(target.id, { rawText: editedText });
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === target.id ? { ...m, rawText: editedText } : m,
+            ),
+          );
+
+          const aiMsg = messages.find(
+            (m) => m.roundIndex === target.roundIndex && m.role === 'ai',
+          );
+          if (aiMsg) {
+            await deleteMessage(aiMsg.id);
+            setMessages((prev) => prev.filter((m) => m.id !== aiMsg.id));
+          }
+          setEditingMessage(null);
+          editingMessageRef.current = null;
+
+          handleRegenerateAfterEdit(editedText);
+          return;
         }
 
         setEditingMessage(null);
-        handleSendMessage(editedText);
-      } else {
-        setEditingMessage(null);
+        editingMessageRef.current = null;
+      } catch (dbError) {
+        console.error('[GameView] handleEditSave 保存失败:', dbError);
       }
-    } catch (dbError) {
-      console.error('[GameView] handleEditSave 保存失败:', dbError);
-    }
-  }, [editingMessage, messages, handleSendMessage]);
+    },
+    [messages, handleRegenerateAfterEdit],
+  );
 
   handleContinueStoryRef.current = handleContinueStory;
+handleSendMessageRef.current = handleSendMessage;
 
   const isSending = loadingState === 'sending';
 
@@ -1232,12 +1245,16 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           onSend={handleSendMessage}
           onContinue={handleContinueStory}
           disabled={isSending}
+          apis={apis}
+          selectedApiId={displayedApiId}
+          onSelectApi={handleSelectApi}
         />
       </div>
 
       {contextMenuTarget && (
         <ContextMenu
           message={contextMenuTarget}
+          isLastAiMessage={isLastAiMessage}
           onAction={(action) => handleContextMenuAction(action, contextMenuTarget)}
           onClose={() => setContextMenuTarget(null)}
         />

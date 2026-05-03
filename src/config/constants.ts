@@ -1,4 +1,4 @@
-import type { GameConfig, NetworkConfig, SystemConfig, WorldConfig, AiRestrictionConfig, CharacterConfig, WinConditionConfig, ConfigTabKey } from '@/types/config';
+import type { GameConfig, NetworkConfig, ApiConfig, SystemConfig, WorldConfig, AiRestrictionConfig, CharacterConfig, WinConditionConfig, ConfigTabKey } from '@/types/config';
 
 export const APP_NAME = '文字冒险 - AI Text Adventure';
 
@@ -29,12 +29,21 @@ export const KEYBOARD_SHORTCUTS = {
   CANCEL: 'Escape',
 } as const;
 
-export const DEFAULT_NETWORK_CONFIG: NetworkConfig = {
+const DEFAULT_API_ID = 'api_default';
+
+export const DEFAULT_API_CONFIG: ApiConfig = {
+  id: DEFAULT_API_ID,
+  label: '默认API',
   apiEndpoint: 'https://api.openai.com/v1/chat/completions',
   apiKey: '',
   modelName: 'gpt-4o',
   temperature: 0.8,
   topP: 0.95,
+};
+
+export const DEFAULT_NETWORK_CONFIG: NetworkConfig = {
+  apis: [{ ...DEFAULT_API_CONFIG }],
+  selectedId: DEFAULT_API_ID,
 };
 
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {

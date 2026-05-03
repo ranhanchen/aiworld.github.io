@@ -15,26 +15,26 @@ export default function MessageBlock({ message, onLongPress }: MessageBlockProps
 
   return (
     <div
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 animate-slide-up`}
+      className={`flex mb-4 animate-slide-up ${isUser ? 'justify-end' : 'justify-start'}`}
       onContextMenu={handleContextMenu}
       data-message-id={message.id}
       data-round-index={message.roundIndex}
     >
-      <div className="w-full">
-        {message.isCompressedAnchor && (
-          <div className="flex items-center gap-1 mb-1 ml-1">
-            <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
-          </svg>
-          <span className="text-xs text-amber-500 font-medium">记忆锚点</span>
-          </div>
-        )}
+      {isUser ? (
+        <div className="bg-accent dark:bg-accent-dark text-white px-4 py-2.5 rounded-2xl rounded-br-md shadow-sm max-w-full block">
+          <p className="text-base whitespace-pre-wrap break-words">{message.rawText}</p>
+        </div>
+      ) : (
+        <div className="w-full">
+          {message.isCompressedAnchor && (
+            <div className="flex items-center gap-1 mb-1 ml-1">
+              <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
+            </svg>
+            <span className="text-xs text-amber-500 font-medium">记忆锚点</span>
+            </div>
+          )}
 
-        {isUser ? (
-          <div className="bg-accent dark:bg-accent-dark text-white px-4 py-2.5 rounded-2xl rounded-br-md shadow-sm">
-            <p className="text-base whitespace-pre-wrap break-words">{message.rawText}</p>
-          </div>
-        ) : (
           <div className="bg-panel dark:bg-panel-dark rounded-2xl rounded-bl-md shadow-sm px-4 py-3 border border-gray-100 dark:border-gray-700 text-base">
             {message.status === 'pending' && (
               <div className="flex items-center gap-2 text-text-secondary dark:text-text-secondary-dark">
@@ -58,8 +58,11 @@ export default function MessageBlock({ message, onLongPress }: MessageBlockProps
             )}
 
             {message.status === 'error' && (
-              <div className="text-red-500 text-base">
-                响应生成失败，请重试
+              <div className="flex items-center gap-2 text-red-500 text-base">
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>AI响应生成失败，请检查API配置或重试</span>
               </div>
             )}
 
@@ -67,8 +70,8 @@ export default function MessageBlock({ message, onLongPress }: MessageBlockProps
               <span className="inline-block w-2 h-4 bg-accent ml-0.5 animate-pulse rounded-sm" />
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

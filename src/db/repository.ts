@@ -126,14 +126,6 @@ export async function createMessage(dto: MessageCreateDTO): Promise<Message> {
     isCompressedAnchor: false,
   };
 
-  console.log('[repository] createMessage 保存消息:', {
-    id: message.id,
-    saveId: message.saveId,
-    roundIndex: message.roundIndex,
-    role: message.role,
-    rawText: message.rawText.substring(0, 30),
-  });
-
   await putToStore(STORE_MESSAGES, message);
   return message;
 }
@@ -170,34 +162,16 @@ export async function getMessagesBySaveId(
   limit?: number,
   offset?: number,
 ): Promise<Message[]> {
-  // 使用 bound 范围查询精确匹配 saveId，createdAt 范围为 [0, Infinity]
-  const range = IDBKeyRange.bound([saveId, 0], [saveId, Infinity]);
-  const all = await getAllFromIndex<Message>(
-    STORE_MESSAGES,
-    'saveId_createdAt',
-    range,
-  );
-
-  console.log('[repository] getMessagesBySaveId 查询结果:', {
-    saveId,
-    查询到的消息数: all.length,
-    消息IDs: all.map(m => m.id),
-    消息详情: all.map(m => ({
-      id: m.id,
-      saveId: m.saveId,
-      role: m.role,
-      roundIndex: m.roundIndex,
-      rawText: m.rawText,
-      createdAt: m.createdAt,
-    })),
-  });
+  // 使用 saveId 简单索引查询，避免 compound key 边界问题
+  const all = await getAllFromIndex<Message>(STORE_MESSAGES, 'saveId', saveId);
 
   const sorted = all.sort((a, b) => a.roundIndex - b.roundIndex);
 
   if (offset !== undefined) {
-    const start = offset;
-    const end = limit !== undefined ? start + limit : undefined;
-    return sorted.slice(start, end);
+    if (limit !== undefined) {
+      return sorted.slice(offset, offset + limit);
+    }
+    return sorted.slice(offset);
   }
 
   if (limit !== undefined) {
@@ -298,28 +272,47 @@ export async function importSaves(jsonString: string): Promise<{ imported: numbe
 
     // 迁移导入的存档
     const migratedSave = migrateSave(save);
-    let oldSaveId = migratedSave.id;
+    const oldSaveId = migratedSave.id;
 
     const existing = await getSave(migratedSave.id);
     if (existing) {
-      oldSaveId = migratedSave.id;
       migratedSave.id = generateId();
     }
 
     await putToStore(STORE_SAVES, migratedSave);
     imported++;
 
-    // 更新该存档对应的消息的 saveId
+    // 只导入属于该存档的消息
     if (Array.isArray(messages)) {
-      const validMessages = messages.filter(
-        (m) => m.id && m.saveId && typeof m.roundIndex === 'number',
+      const saveMessages = (messages as Message[]).filter(
+        (m) => m.saveId === oldSaveId && m.id && typeof m.roundIndex === 'number',
       );
-      const messagesToImport = validMessages.map(m => ({
-        ...m,
-        saveId: migratedSave.id, // 更新为新的存档 ID
-      }));
-      if (messagesToImport.length > 0) {
+
+      console.log('[repository] importSaves 消息过滤:', {
+        oldSaveId,
+        newSaveId: migratedSave.id,
+        messagesCount: (messages as Message[]).length,
+        matchedCount: saveMessages.length,
+        matchedIds: saveMessages.map(m => m.id),
+      });
+
+      if (saveMessages.length > 0) {
+        const messagesToImport = saveMessages.map(m => ({
+          ...m,
+          saveId: migratedSave.id,
+          createdAt: m.createdAt || Date.now(),
+          updatedAt: m.updatedAt || Date.now(),
+        }));
         await batchPut(STORE_MESSAGES, messagesToImport);
+        console.log('[repository] importSaves 消息导入完成:', {
+          saveId: migratedSave.id,
+          count: messagesToImport.length,
+        });
+      } else {
+        console.warn('[repository] importSaves 警告：没有匹配到属于该存档的消息', {
+          oldSaveId,
+          availableMessageSaveIds: (messages as Message[]).map(m => m.saveId),
+        });
       }
     }
   }

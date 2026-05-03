@@ -70,16 +70,12 @@ export async function getFromStore<T>(storeName: string, key: string): Promise<T
 
 export async function putToStore<T>(storeName: string, value: T): Promise<void> {
   const database = await openDatabase();
-  console.log('[database] putToStore 开始保存:', { storeName, value });
   return new Promise<void>((resolve, reject) => {
     const transaction = database.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
     const request = store.put(value);
 
-    request.onsuccess = () => {
-      console.log('[database] putToStore 成功:', { storeName, value });
-      resolve();
-    };
+    request.onsuccess = () => resolve();
     request.onerror = (event) => {
       const errorMsg = (event.target as any).error?.message || 'Unknown IndexedDB error';
       console.error(`[database] putToStore failed (${storeName}):`, errorMsg, value);
@@ -118,17 +114,13 @@ export async function getAllFromIndex<T>(
   value: IDBValidKey | IDBKeyRange,
 ): Promise<T[]> {
   const database = await openDatabase();
-  console.log('[database] getAllFromIndex 开始查询:', { storeName, indexName, value });
   return new Promise<T[]>((resolve, reject) => {
     const transaction = database.transaction(storeName, 'readonly');
     const store = transaction.objectStore(storeName);
     const index = store.index(indexName);
     const request = index.getAll(value);
 
-    request.onsuccess = () => {
-      console.log('[database] getAllFromIndex 查询结果:', { storeName, indexName, resultCount: request.result.length, results: request.result });
-      resolve(request.result as T[]);
-    };
+    request.onsuccess = () => resolve(request.result as T[]);
     request.onerror = (event: Event) => reject(new Error(`Get all from index ${indexName} failed: ${(event.target as IDBRequest).error?.message || 'Unknown error'}`));
   });
 }

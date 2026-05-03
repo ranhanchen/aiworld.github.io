@@ -1,6 +1,6 @@
-import { DEFAULT_NETWORK_CONFIG } from '@/config/constants';
+import { DEFAULT_API_CONFIG } from '@/config/constants';
 
-export function createSSEConnection(
+export function createNonStreamingRequest(
   apiEndpoint: string,
   apiKey: string,
   modelName: string,
@@ -9,22 +9,22 @@ export function createSSEConnection(
     temperature?: number;
     topP?: number;
   },
-): AbortController {
+): { controller: AbortController; response: Promise<string> } {
   const controller = new AbortController();
-  const endpoint = apiEndpoint || DEFAULT_NETWORK_CONFIG.apiEndpoint;
-  const model = modelName || DEFAULT_NETWORK_CONFIG.modelName;
+  const endpoint = apiEndpoint || DEFAULT_API_CONFIG.apiEndpoint;
+  const model = modelName || DEFAULT_API_CONFIG.modelName;
 
-  console.log('[api] createSSEConnection 发起请求:', { endpoint: endpoint.substring(0, 60), model, messageCount: messages.length });
+  console.log('[api] createNonStreamingRequest 发起请求:', { endpoint: endpoint.substring(0, 60), model, messageCount: messages.length });
 
   const body = JSON.stringify({
     model,
     messages,
-    temperature: options?.temperature ?? DEFAULT_NETWORK_CONFIG.temperature,
-    top_p: options?.topP ?? DEFAULT_NETWORK_CONFIG.topP,
-    stream: true,
+    temperature: options?.temperature ?? DEFAULT_API_CONFIG.temperature,
+    top_p: options?.topP ?? DEFAULT_API_CONFIG.topP,
+    stream: false,
   });
 
-  fetch(endpoint, {
+  const response = fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -32,83 +32,20 @@ export function createSSEConnection(
     },
     body,
     signal: controller.signal,
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        const event = new CustomEvent('sse-error', {
-          detail: { status: response.status, message: errorText },
-        });
-        window.dispatchEvent(event);
-        return;
-      }
+  }).then(async (res) => {
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      throw new Error(`API Error ${res.status}: ${errorText}`);
+    }
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      throw new Error('Invalid response format: missing content');
+    }
+    return content;
+  });
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        const event = new CustomEvent('sse-error', {
-          detail: { status: 0, message: 'Response body is not readable' },
-        });
-        window.dispatchEvent(event);
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          const completeEvent = new CustomEvent('sse-complete');
-          window.dispatchEvent(completeEvent);
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) {
-            continue;
-          }
-
-          const dataStr = trimmed.slice(6);
-
-          if (dataStr === '[DONE]') {
-            const completeEvent = new CustomEvent('sse-complete');
-            window.dispatchEvent(completeEvent);
-            return;
-          }
-
-          try {
-            const data = JSON.parse(dataStr);
-            const delta = data.choices?.[0]?.delta?.content;
-            if (delta) {
-              const tokenEvent = new CustomEvent('sse-token', {
-                detail: { content: delta },
-              });
-              window.dispatchEvent(tokenEvent);
-            }
-          } catch {
-            const errorEvent = new CustomEvent('sse-error', {
-              detail: { status: 0, message: `Failed to parse SSE data: ${dataStr}` },
-            });
-            window.dispatchEvent(errorEvent);
-          }
-        }
-      }
-    })
-    .catch((err) => {
-      if (err.name !== 'AbortError') {
-        const event = new CustomEvent('sse-error', {
-          detail: { status: 0, message: err.message },
-        });
-        window.dispatchEvent(event);
-      }
-    });
-
-  return controller;
+  return { controller, response };
 }
 
 export function createSystemPrompt(config: {

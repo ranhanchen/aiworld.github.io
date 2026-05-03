@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { GameConfig, ConfigTabKey } from '@/types/config';
+import type { GameConfig, ConfigTabKey, ApiConfig } from '@/types/config';
+import { getActiveApi } from '@/types/config';
 import { migrateGameConfig } from '@/utils/configMigration';
 import TabPanel from '@/components/ConfigCenter/TabPanel';
 
@@ -34,6 +35,8 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
   });
   const [showCustomModel, setShowCustomModel] = useState(false);
   const [fetchModelsError, setFetchModelsError] = useState<string | null>(null);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const justFetchedModelsRef = useRef(false);
 
@@ -66,11 +69,74 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
     (field: string, value: string | number) => {
       setConfig((prev) => ({
         ...prev,
-        network: { ...prev.network, [field]: value },
+        network: {
+          ...prev.network,
+          apis: prev.network.apis.map((api) =>
+            api.id === prev.network.selectedId ? { ...api, [field]: value } : api,
+          ),
+        },
       }));
     },
     [],
   );
+
+  const addApiConfig = useCallback(() => {
+    setConfig((prev) => {
+      const newId = 'api_' + Date.now();
+      const count = prev.network.apis.length + 1;
+      const newApi: ApiConfig = {
+        id: newId,
+        label: `API ${count}`,
+        apiEndpoint: 'https://api.openai.com/v1/chat/completions',
+        apiKey: '',
+        modelName: 'gpt-4o',
+        temperature: 0.8,
+        topP: 0.95,
+      };
+      return {
+        ...prev,
+        network: {
+          apis: [...prev.network.apis, newApi],
+          selectedId: newId,
+        },
+      };
+    });
+  }, []);
+
+  const removeApiConfig = useCallback((id: string) => {
+    setConfig((prev) => {
+      const remaining = prev.network.apis.filter((a) => a.id !== id);
+      if (remaining.length === 0) return prev;
+      const newSelectedId = prev.network.selectedId === id
+        ? remaining[0].id
+        : prev.network.selectedId;
+      return {
+        ...prev,
+        network: { apis: remaining, selectedId: newSelectedId },
+      };
+    });
+  }, []);
+
+  const selectApi = useCallback((id: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      network: { ...prev.network, selectedId: id },
+    }));
+  }, []);
+
+  const updateApiLabel = useCallback((id: string, label: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      network: {
+        ...prev.network,
+        apis: prev.network.apis.map((api) =>
+          api.id === id ? { ...api, label } : api,
+        ),
+      },
+    }));
+  }, []);
+
+  const activeApi = getActiveApi(config.network);
 
   const updateSystem = useCallback(
     (field: string, value: string | number | boolean) => {
@@ -170,8 +236,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
   const handleAiGenerate = useCallback(async (fieldName: string, section: string) => {
     setAiGenerating((prev) => ({ ...prev, [fieldName]: true }));
     try {
-      const { network } = config;
-      if (!network.apiKey) {
+      if (!activeApi || !activeApi.apiKey) {
         alert('请先在"网络配置"选项卡中设置API密钥');
         setAiGenerating((prev) => ({ ...prev, [fieldName]: false }));
         return;
@@ -181,14 +246,14 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
       const { systemPrompt, userPrompt } = buildFieldGenerationPrompt(config, fieldName, currentValue);
       const controller = new AbortController();
 
-      const response = await fetch(network.apiEndpoint, {
+      const response = await fetch(activeApi.apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${network.apiKey}`,
+          Authorization: `Bearer ${activeApi.apiKey}`,
         },
         body: JSON.stringify({
-          model: network.modelName,
+          model: activeApi.modelName,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
@@ -226,7 +291,8 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
   }, [config, updateWorld, updateAiRestriction, updateCharacter, updateWinCondition]);
 
   const handleFetchModels = useCallback(async () => {
-    const { apiEndpoint, apiKey } = config.network;
+    if (!activeApi) return;
+    const { apiEndpoint, apiKey } = activeApi;
     if (!apiKey.trim()) {
       setFetchModelsError('请先填写API密钥');
       return;
@@ -274,7 +340,54 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
     } finally {
       setFetchingModels(false);
     }
-  }, [config.network]);
+  }, [activeApi]);
+
+  const handleTestConnection = useCallback(async () => {
+    if (!activeApi) return;
+    const { apiEndpoint, apiKey } = activeApi;
+    if (!apiKey.trim()) {
+      setTestResult({ success: false, message: '请先填写API密钥' });
+      return;
+    }
+    if (!apiEndpoint.trim()) {
+      setTestResult({ success: false, message: '请先填写API端点' });
+      return;
+    }
+
+    setTestingConnection(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: activeApi.modelName || 'gpt-3.5-turbo',
+          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 5,
+          stream: false,
+        }),
+      });
+
+      if (response.ok) {
+        setTestResult({ success: true, message: '连接成功！大模型API可正常使用' });
+      } else {
+        const errorText = await response.text().catch(() => '');
+        setTestResult({
+          success: false,
+          message: `连接失败 (HTTP ${response.status})${errorText ? ': ' + errorText.slice(0, 80) : ''}`,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTestResult({ success: false, message: `网络错误: ${message}` });
+    } finally {
+      setTestingConnection(false);
+    }
+  }, [activeApi]);
 
   const handleSelectModel = useCallback((modelId: string) => {
     if (modelId === '__custom__') {
@@ -290,95 +403,168 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
       <TabPanel activeTab={activeTab} onTabChange={setActiveTab}>
         {activeTab === 'network' && (
           <div className="space-y-4">
-            <FieldRow label="API端点">
-              <input
-                type="text"
-                value={config.network.apiEndpoint}
-                onChange={(e) => updateNetwork('apiEndpoint', e.target.value)}
-                onBlur={(e) => {
-                  const raw = e.target.value.trim();
-                  if (!raw) return;
-                  if (raw.endsWith('/v1/chat/completions')) return;
-                  const cleaned = raw.replace(/\/+$/, '');
-                  const suffix = cleaned.endsWith('/v1') ? '/chat/completions'
-                    : cleaned.endsWith('/v1/chat') ? '/completions'
-                    : '/v1/chat/completions';
-                  updateNetwork('apiEndpoint', cleaned + suffix);
-                }}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="https://api.openai.com/v1/chat/completions"
-              />
-            </FieldRow>
-            <FieldRow label="API密钥">
-              <input
-                type="password"
-                value={config.network.apiKey}
-                onChange={(e) => updateNetwork('apiKey', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="sk-..."
-              />
-            </FieldRow>
-            <FieldRow label="模型名称">
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <select
-                    ref={modelSelectRef}
-                    value={showCustomModel ? '__custom__' : config.network.modelName}
-                    onChange={(e) => handleSelectModel(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent min-h-[44px]"
-                  >
-                    {!availableModels.some((m) => m === config.network.modelName) && config.network.modelName && !showCustomModel && (
-                      <option value={config.network.modelName}>{config.network.modelName}</option>
-                    )}
-                    {availableModels.map((modelId) => (
-                      <option key={modelId} value={modelId}>{modelId}</option>
-                    ))}
-                    <option value="__custom__">自定义输入...</option>
-                  </select>
+            {config.network.apis.length > 1 && (
+              <div className="flex flex-wrap gap-2 pb-2 border-b border-gray-100 dark:border-gray-700">
+                {config.network.apis.map((api) => (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleFetchModels();
-                    }}
-                    disabled={fetchingModels}
-                    className={`shrink-0 px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity min-h-[44px] ${
-                      fetchingModels ? 'opacity-50' : ''
+                    key={api.id}
+                    onClick={() => selectApi(api.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors min-h-[44px] ${
+                      api.id === config.network.selectedId
+                        ? 'bg-accent text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
-                    title={availableModels.length > 0 ? `已缓存 ${availableModels.length} 个模型，点击刷新` : '获取可用模型列表'}
                   >
-                    {fetchingModels ? (
-                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      '获取模型'
-                    )}
+                    {api.label || '未命名'}
                   </button>
-                </div>
-                {fetchModelsError && (
-                  <p className="text-xs text-red-500">{fetchModelsError}</p>
-                )}
-                {showCustomModel && (
+                ))}
+              </div>
+            )}
+
+            {activeApi && (
+              <>
+                <FieldRow label="API名称">
                   <input
                     type="text"
-                    value={config.network.modelName}
-                    onChange={(e) => updateNetwork('modelName', e.target.value)}
+                    value={activeApi.label}
+                    onChange={(e) => updateApiLabel(activeApi.id, e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                    placeholder="输入自定义模型名称..."
-                    autoFocus
+                    placeholder="例如：GPT-4o、Claude、DeepSeek"
                   />
+                </FieldRow>
+                <FieldRow label="API端点">
+                  <input
+                    type="text"
+                    value={activeApi.apiEndpoint}
+                    onChange={(e) => updateNetwork('apiEndpoint', e.target.value)}
+                    onBlur={(e) => {
+                      const raw = e.target.value.trim();
+                      if (!raw) return;
+                      if (raw.endsWith('/v1/chat/completions')) return;
+                      const cleaned = raw.replace(/\/+$/, '');
+                      const suffix = cleaned.endsWith('/v1') ? '/chat/completions'
+                        : cleaned.endsWith('/v1/chat') ? '/completions'
+                        : '/v1/chat/completions';
+                      updateNetwork('apiEndpoint', cleaned + suffix);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    placeholder="https://api.openai.com/v1/chat/completions"
+                  />
+                </FieldRow>
+                <FieldRow label="API密钥">
+                  <input
+                    type="password"
+                    value={activeApi.apiKey}
+                    onChange={(e) => updateNetwork('apiKey', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    placeholder="sk-..."
+                  />
+                </FieldRow>
+                <FieldRow label="模型名称">
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <select
+                        ref={modelSelectRef}
+                        value={showCustomModel ? '__custom__' : activeApi.modelName}
+                        onChange={(e) => handleSelectModel(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent min-h-[44px]"
+                      >
+                        {!availableModels.some((m) => m === activeApi.modelName) && activeApi.modelName && !showCustomModel && (
+                          <option value={activeApi.modelName}>{activeApi.modelName}</option>
+                        )}
+                        {availableModels.map((modelId) => (
+                          <option key={modelId} value={modelId}>{modelId}</option>
+                        ))}
+                        <option value="__custom__">自定义输入...</option>
+                      </select>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFetchModels();
+                        }}
+                        disabled={fetchingModels}
+                        className={`shrink-0 px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity min-h-[44px] ${
+                          fetchingModels ? 'opacity-50' : ''
+                        }`}
+                        title={availableModels.length > 0 ? `已缓存 ${availableModels.length} 个模型，点击刷新` : '获取可用模型列表'}
+                      >
+                        {fetchingModels ? (
+                          <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          '获取模型'
+                        )}
+                      </button>
+                    </div>
+                    {fetchModelsError && (
+                      <p className="text-xs text-red-500">{fetchModelsError}</p>
+                    )}
+                    {showCustomModel && (
+                      <input
+                        type="text"
+                        value={activeApi.modelName}
+                        onChange={(e) => updateNetwork('modelName', e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                        placeholder="输入自定义模型名称..."
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                </FieldRow>
+                <FieldRow label="温度 (0-2)">
+                  <input
+                    type="number"
+                    value={activeApi.temperature}
+                    onChange={(e) => updateNetwork('temperature', Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    min={0}
+                    max={2}
+                    step={0.1}
+                  />
+                </FieldRow>
+              </>
+            )}
+
+            <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+              <button
+                onClick={addApiConfig}
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+              >
+                添加API
+              </button>
+              {activeApi && config.network.apis.length > 1 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('确定要删除 "' + (activeApi.label || '未命名') + '" 这个API配置吗？')) {
+                      removeApiConfig(activeApi.id);
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+                >
+                  删除当前API
+                </button>
+              )}
+              <button
+                onClick={handleTestConnection}
+                disabled={testingConnection}
+                className={`px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px] ${
+                  testingConnection ? 'opacity-50' : ''
+                }`}
+              >
+                {testingConnection ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    测试中...
+                  </span>
+                ) : (
+                  '测试连接'
                 )}
-              </div>
-            </FieldRow>
-            <FieldRow label="温度 (0-2)">
-              <input
-                type="number"
-                value={config.network.temperature}
-                onChange={(e) => updateNetwork('temperature', Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                min={0}
-                max={2}
-                step={0.1}
-              />
-            </FieldRow>
+              </button>
+            </div>
+            {testResult && (
+              <p className={`text-xs ${testResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                {testResult.message}
+              </p>
+            )}
           </div>
         )}
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Save } from '@/types/save';
 import type { GameConfig } from '@/types/config';
+import { getActiveApi } from '@/types/config';
 import { createSave, getLatestSave, updateSave } from '@/db/repository';
 import { COVER_COLORS } from '@/config/constants';
 import SaveList from '@/components/SaveManager/SaveList';
@@ -115,13 +116,14 @@ export default function App() {
   }, []);
 
   const handlePlaySave = useCallback((save: Save) => {
-    console.log('[App] handlePlaySave 接收到的 save:', {
-      id: save.id,
-      'configSnapshot存在': !!save.metadata?.configSnapshot,
-      'network存在': !!save.metadata?.configSnapshot?.network,
-      'apiKey有值': !!save.metadata?.configSnapshot?.network?.apiKey,
-      'apiKey长度': save.metadata?.configSnapshot?.network?.apiKey?.length,
-    });
+    const activeApi = getActiveApi(save.metadata?.configSnapshot?.network);
+      console.log('[App] handlePlaySave 接收到的 save:', {
+        id: save.id,
+        'configSnapshot存在': !!save.metadata?.configSnapshot,
+        'network存在': !!save.metadata?.configSnapshot?.network,
+        'apiKey有值': !!activeApi?.apiKey,
+        'apiKey长度': activeApi?.apiKey?.length,
+      });
     setCurrentSave(save);
     setScreen('game');
   }, []);
@@ -194,6 +196,15 @@ export default function App() {
       {screen === 'config' && (
         <div className="min-h-[100dvh] bg-surface dark:bg-surface-dark">
           <div className="max-w-3xl mx-auto px-4 py-6">
+            <button
+              onClick={handleCancelConfig}
+              className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark mb-4 min-h-[44px] min-w-[44px]"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>返回主页</span>
+            </button>
             <h1 className="text-xl font-bold mb-6">
               {editingSaveId ? '编辑存档设定' : '新建存档设定'}
             </h1>
