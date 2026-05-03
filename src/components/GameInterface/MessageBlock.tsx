@@ -57,6 +57,12 @@ export default function MessageBlock({ message, onLongPress }: MessageBlockProps
               </div>
             )}
 
+            {message.status === 'completed' && message.segments.length === 0 && message.rawText && (
+              <p className="text-base whitespace-pre-wrap break-words text-text-primary dark:text-text-primary-dark">
+                {message.rawText}
+              </p>
+            )}
+
             {message.status === 'error' && (
               <div className="flex items-center gap-2 text-red-500 text-base">
                 <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

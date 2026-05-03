@@ -91,7 +91,7 @@ export default function VirtualMessageList({
       ref={containerRef}
       className="flex-1 overflow-y-auto overscroll-contain"
     >
-      <div className="max-w-[70%] mx-auto px-3 py-4">
+      <div className="w-full px-3 py-4">
         {loadingMore && (
           <div className="flex justify-center py-3">
             <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
