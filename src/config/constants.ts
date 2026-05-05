@@ -98,7 +98,7 @@ export const CONFIG_TAB_LABELS: Record<ConfigTabKey, string> = {
   network: '网络配置',
   system: '系统核心',
   world: '世界观设定',
-  aiRestriction: 'AI限制',
+  aiRestriction: 'AI指令',
   character: '角色面板',
   winCondition: '获胜条件',
 };

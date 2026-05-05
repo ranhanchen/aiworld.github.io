@@ -6,6 +6,7 @@ import { FONT_SIZE_CLASS_MAP } from '@/config/constants';
 import VirtualMessageList from '@/components/GameInterface/VirtualMessageList';
 import InputArea from '@/components/GameInterface/InputArea';
 import ContextMenu from '@/components/GameInterface/ContextMenu';
+import MessageEditor from '@/components/GameInterface/MessageEditor';
 import ConfirmDialog from '@/components/Common/ConfirmDialog';
 
 interface ChatMessage {
@@ -82,6 +83,7 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
   const [loadingState, setLoadingState] = useState<LoadingState>('idle');
   const [contextMenuTarget, setContextMenuTarget] = useState<ChatMessage | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const INPUT_DRAFT_KEY = 'ta_chat_input_draft';
@@ -199,6 +201,11 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
         break;
       }
 
+      case 'edit': {
+        setEditingMessage(message);
+        break;
+      }
+
       case 'delete': {
         setConfirmDialog({
           message: '确定要删除这条消息吗？',
@@ -241,6 +248,16 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
     }
   }, [messages, handleSend]);
 
+  const handleEditSave = useCallback((editedText: string) => {
+    if (!editingMessage) return;
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === editingMessage.id ? { ...m, content: editedText } : m,
+      ),
+    );
+    setEditingMessage(null);
+  }, [editingMessage]);
+
   const handleSelectApi = useCallback((apiId: string) => {
     const updatedNetwork = { ...config.network, selectedId: apiId };
     onUpdateConfig({ ...config, network: updatedNetwork });
@@ -266,6 +283,8 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
   const gameMessages = messages.map(chatMessageToGameMessage);
 
   const contextMenuGameMessage = contextMenuTarget ? chatMessageToGameMessage(contextMenuTarget) : null;
+
+  const editingGameMessage = editingMessage ? chatMessageToGameMessage(editingMessage) : null;
 
   return (
     <div className="h-[100dvh] flex flex-col bg-surface dark:bg-surface-dark">
@@ -372,6 +391,14 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
           isLastAiMessage={messages.length > 0 && messages[messages.length - 1]?.id === contextMenuTarget.id && contextMenuTarget.role === 'assistant'}
           onAction={(action) => handleContextMenuAction(action, contextMenuTarget)}
           onClose={() => setContextMenuTarget(null)}
+        />
+      )}
+
+      {editingGameMessage && editingMessage && (
+        <MessageEditor
+          message={editingGameMessage}
+          onSave={handleEditSave}
+          onCancel={() => setEditingMessage(null)}
         />
       )}
 

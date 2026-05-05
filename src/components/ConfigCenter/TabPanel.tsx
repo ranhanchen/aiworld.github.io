@@ -5,7 +5,7 @@ const TAB_LABELS: Record<ConfigTabKey, string> = {
   network: '网络设置',
   system: '系统设置',
   world: '世界观',
-  aiRestriction: 'AI限制',
+  aiRestriction: 'AI指令',
   character: '角色面板',
   winCondition: '获胜条件',
 };
@@ -19,7 +19,7 @@ interface TabPanelProps {
 
 export default function TabPanel({ activeTab, onTabChange, children, chatMode }: TabPanelProps) {
   const allTabs: ConfigTabKey[] = ['network', 'system', 'world', 'aiRestriction', 'character', 'winCondition'];
-  const tabs = chatMode ? ['network', 'system'] as ConfigTabKey[] : allTabs;
+  const tabs = chatMode ? ['network', 'aiRestriction', 'system'] as ConfigTabKey[] : allTabs;
 
   return (
     <div>
