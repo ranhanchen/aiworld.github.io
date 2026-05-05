@@ -1019,9 +1019,9 @@ function CustomFieldRow({ fieldKey, value, onUpdate }: CustomFieldRowProps) {
       <textarea
         value={value}
         onChange={(e) => onUpdate(fieldKey, e.target.value)}
-        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
         placeholder="属性值"
-        rows={2}
+        rows={5}
       />
     </div>
   );
