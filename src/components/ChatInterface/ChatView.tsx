@@ -140,13 +140,38 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
     setMessages((prev) => [...prev, userMsg, aiMsg]);
     setLoadingState('sending');
 
-    const chatHistory: Array<{ role: string; content: string }> = [
+    const chatHistory: Array<{ role: string; content: string }> = [];
+
+    const systemParts: string[] = [];
+    const aiBasePrompt = config.aiRestriction?.aiBasePrompt?.trim();
+    const aiTone = config.aiRestriction?.aiTone?.trim();
+    if (aiBasePrompt) {
+      systemParts.push(aiBasePrompt);
+    }
+    if (aiTone) {
+      systemParts.push(`## 输出文笔要求\n${aiTone}`);
+    }
+    const customFields = config.aiRestriction?.customFields;
+    if (customFields) {
+      const entries = Object.entries(customFields)
+        .filter(([k, v]) => k && !k.startsWith('__new_') && v)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n');
+      if (entries) {
+        systemParts.push(`## 自定义指令\n${entries}`);
+      }
+    }
+    if (systemParts.length > 0) {
+      chatHistory.push({ role: 'system', content: systemParts.join('\n\n') });
+    }
+
+    chatHistory.push(
       ...messages.map((m) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content,
       })),
       { role: 'user', content: text },
-    ];
+    );
 
     const { controller, response } = createNonStreamingRequest(
       apiEndpoint,
