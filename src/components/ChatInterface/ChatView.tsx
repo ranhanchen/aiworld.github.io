@@ -44,15 +44,32 @@ function saveChatMessages(messages: ChatMessage[]): void {
 }
 
 function chatMessageToGameMessage(msg: ChatMessage) {
+  if (msg.role === 'assistant') {
+    const paragraphs = msg.content.split('\n').filter(p => p.trim());
+    const segments = paragraphs.map(p => ({
+      type: 'scene' as const,
+      content: p,
+    }));
+    return {
+      id: msg.id,
+      saveId: '__chat__',
+      roundIndex: 0,
+      role: 'ai' as const,
+      rawText: msg.content,
+      segments: segments.length > 0 ? segments : [{ type: 'scene' as const, content: msg.content }],
+      status: 'completed' as const,
+      createdAt: msg.createdAt,
+      updatedAt: msg.createdAt,
+      isCompressedAnchor: false,
+    };
+  }
   return {
     id: msg.id,
     saveId: '__chat__',
     roundIndex: 0,
-    role: msg.role === 'user' ? 'user' as const : 'ai' as const,
+    role: 'user' as const,
     rawText: msg.content,
-    segments: msg.role === 'assistant'
-      ? [{ type: 'scene' as const, content: msg.content }]
-      : [],
+    segments: [],
     status: 'completed' as const,
     createdAt: msg.createdAt,
     updatedAt: msg.createdAt,
@@ -84,12 +101,6 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
   const getNetworkConfig = useCallback(() => {
     const network = config.network;
     const activeApi = getActiveApi(network);
-    console.log('[ChatView] getNetworkConfig:', {
-      hasNetwork: !!network,
-      apisCount: network?.apis?.length,
-      selectedId: network?.selectedId,
-      activeApi: activeApi ? { id: activeApi.id, endpoint: activeApi.apiEndpoint?.substring(0, 50), hasKey: !!activeApi.apiKey, keyLen: activeApi.apiKey?.length, model: activeApi.modelName } : null,
-    });
     if (activeApi && activeApi.apiKey && activeApi.apiEndpoint) {
       return {
         apiKey: activeApi.apiKey,
@@ -235,6 +246,17 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
     onUpdateConfig({ ...config, network: updatedNetwork });
   }, [config, onUpdateConfig]);
 
+  const handleClearMessages = useCallback(() => {
+    setConfirmDialog({
+      message: '确定要清空所有对话记录吗？此操作不可撤销。',
+      onConfirm: () => {
+        setConfirmDialog(null);
+        setMessages([]);
+        try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch {}
+      },
+    });
+  }, []);
+
   const isSending = loadingState === 'sending';
   const fontSizeClass = FONT_SIZE_CLASS_MAP[config.system.fontSize] || 'text-base';
   const networkConfig = config.network;
@@ -262,16 +284,29 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
           <h1 className="text-sm font-semibold">AI 对话</h1>
         </div>
 
-        <button
-          onClick={onOpenSettings}
-          className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark min-h-[44px] min-w-[44px]"
-          title="设置"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              onClick={handleClearMessages}
+              className="p-2 text-text-secondary dark:text-text-secondary-dark hover:text-red-500 dark:hover:text-red-400 transition-colors min-h-[44px] min-w-[44px]"
+              title="清空对话"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={onOpenSettings}
+            className="p-2 text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark min-h-[44px] min-w-[44px]"
+            title="设置"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {loadingState === 'error' && (

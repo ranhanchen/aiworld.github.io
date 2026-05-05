@@ -86,7 +86,7 @@ function SegmentRenderer({ segment }: { segment: MessageSegment }) {
   switch (segment.type) {
     case 'scene':
       return (
-        <p className="text-base text-text-secondary dark:text-text-secondary-dark text-center leading-relaxed my-2 font-sans">
+        <p className="text-base text-text-secondary dark:text-text-secondary-dark text-center leading-relaxed my-2 font-sans whitespace-pre-wrap">
           {segment.content}
         </p>
       );
