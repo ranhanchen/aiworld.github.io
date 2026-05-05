@@ -14,10 +14,12 @@ interface TabPanelProps {
   activeTab: ConfigTabKey;
   onTabChange: (tab: ConfigTabKey) => void;
   children: ReactNode;
+  chatMode?: boolean;
 }
 
-export default function TabPanel({ activeTab, onTabChange, children }: TabPanelProps) {
-  const tabs: ConfigTabKey[] = ['network', 'system', 'world', 'aiRestriction', 'character', 'winCondition'];
+export default function TabPanel({ activeTab, onTabChange, children, chatMode }: TabPanelProps) {
+  const allTabs: ConfigTabKey[] = ['network', 'system', 'world', 'aiRestriction', 'character', 'winCondition'];
+  const tabs = chatMode ? ['network', 'system'] as ConfigTabKey[] : allTabs;
 
   return (
     <div>

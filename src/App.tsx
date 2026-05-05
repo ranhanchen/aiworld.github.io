@@ -3,10 +3,11 @@ import type { Save } from '@/types/save';
 import type { GameConfig } from '@/types/config';
 import { getActiveApi } from '@/types/config';
 import { createSave, getLatestSave, getSave, updateSave, diagnoseDatabase } from '@/db/repository';
-import { COVER_COLORS } from '@/config/constants';
+import { COVER_COLORS, DEFAULT_GAME_CONFIG } from '@/config/constants';
 import SaveList from '@/components/SaveManager/SaveList';
 import ConfigForm from '@/components/ConfigCenter/ConfigForm';
 import GameView from '@/components/GameInterface/GameView';
+import ChatView from '@/components/ChatInterface/ChatView';
 import MemoryOverride from '@/components/MemoryPanel/MemoryOverride';
 
 interface ErrorBoundaryProps {
@@ -68,7 +69,23 @@ class GlobalErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-type AppScreen = 'saves' | 'config' | 'game';
+type AppScreen = 'saves' | 'config' | 'game' | 'chat' | 'chatConfig';
+
+function loadChatConfig(): GameConfig {
+  try {
+    const raw = localStorage.getItem('ta_chat_config');
+    if (raw) {
+      return JSON.parse(raw) as GameConfig;
+    }
+  } catch {}
+  return { ...DEFAULT_GAME_CONFIG };
+}
+
+function saveChatConfig(config: GameConfig): void {
+  try {
+    localStorage.setItem('ta_chat_config', JSON.stringify(config));
+  } catch {}
+}
 
 function pickRandomCoverColor(): string {
   return COVER_COLORS[Math.floor(Math.random() * COVER_COLORS.length)];
@@ -82,6 +99,7 @@ export default function App() {
   const [saveTitle, setSaveTitle] = useState<string>('');
   const [showMemory, setShowMemory] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [chatConfig, setChatConfig] = useState<GameConfig>(() => loadChatConfig());
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window === 'undefined') return false;
     const stored = localStorage.getItem('theme');
@@ -287,6 +305,46 @@ export default function App() {
     setCurrentSave(updatedSave);
   }, []);
 
+  const handleOpenChat = useCallback(async () => {
+    let cfg = loadChatConfig();
+    const activeApi = getActiveApi(cfg.network);
+    if (!activeApi?.apiKey) {
+      try {
+        const latest = await getLatestSave();
+        if (latest?.metadata?.configSnapshot?.network) {
+          const latestApi = getActiveApi(latest.metadata.configSnapshot.network);
+          if (latestApi?.apiKey) {
+            cfg = { ...latest.metadata.configSnapshot };
+            saveChatConfig(cfg);
+          }
+        }
+      } catch {}
+    }
+    setChatConfig(cfg);
+    setScreen('chat');
+  }, []);
+
+  const handleOpenChatSettings = useCallback(() => {
+    setScreen('chatConfig');
+  }, []);
+
+  const handleSaveChatConfig = useCallback((newConfig: GameConfig) => {
+    setChatConfig(newConfig);
+    saveChatConfig(newConfig);
+    setSaveMessage('设置已保存');
+    setTimeout(() => setSaveMessage(null), 2000);
+    setScreen('chat');
+  }, []);
+
+  const handleCancelChatConfig = useCallback(() => {
+    setScreen('chat');
+  }, []);
+
+  const handleUpdateChatConfig = useCallback((newConfig: GameConfig) => {
+    setChatConfig(newConfig);
+    saveChatConfig(newConfig);
+  }, []);
+
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -294,13 +352,15 @@ export default function App() {
           handleCloseMemory();
         } else if (screen === 'config') {
           handleCancelConfig();
+        } else if (screen === 'chatConfig') {
+          handleCancelChatConfig();
         }
       }
     };
 
     document.addEventListener('keydown', handleKeydown);
     return () => document.removeEventListener('keydown', handleKeydown);
-  }, [screen, showMemory, handleCancelConfig, handleCloseMemory]);
+  }, [screen, showMemory, handleCancelConfig, handleCloseMemory, handleCancelChatConfig]);
 
   return (
     <GlobalErrorBoundary>
@@ -311,11 +371,18 @@ export default function App() {
             <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
               文字冒险
             </h1>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[44px] min-w-[44px]"
-              title="切换主题"
-            >
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenChat}
+                className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity"
+              >
+                AI 对话
+              </button>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[44px] min-w-[44px]"
+                title="切换主题"
+              >
               {darkMode ? (
                 <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
@@ -326,6 +393,7 @@ export default function App() {
                 </svg>
               )}
             </button>
+            </div>
           </div>
 
           <SaveList
@@ -379,6 +447,42 @@ export default function App() {
             />
           )}
         </>
+      )}
+
+      {screen === 'chat' && (
+        <ChatView
+          config={chatConfig}
+          onOpenSettings={handleOpenChatSettings}
+          onBack={handleBackToMenu}
+          onUpdateConfig={handleUpdateChatConfig}
+        />
+      )}
+
+      {screen === 'chatConfig' && (
+        <div className="min-h-[100dvh] bg-surface dark:bg-surface-dark">
+          <div className="max-w-3xl mx-auto px-4 py-6">
+            <button
+              onClick={handleCancelChatConfig}
+              className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark mb-4 min-h-[44px] min-w-[44px]"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>返回对话</span>
+            </button>
+            <h1 className="text-xl font-bold mb-6">
+              对话设置
+            </h1>
+            <ConfigForm
+              initialConfig={chatConfig}
+              onSave={handleSaveChatConfig}
+              onCancel={handleCancelChatConfig}
+              saveMessage={saveMessage}
+              onClearMessage={handleClearMessage}
+              chatMode
+            />
+          </div>
+        </div>
       )}
     </div>
     </GlobalErrorBoundary>

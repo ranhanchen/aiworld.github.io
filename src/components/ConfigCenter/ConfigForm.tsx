@@ -12,14 +12,15 @@ interface ConfigFormProps {
   onClearMessage: () => void;
   saveTitle?: string;
   onSaveTitleChange?: (title: string) => void;
+  chatMode?: boolean;
 }
 
 
-export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessage, onClearMessage, saveTitle, onSaveTitleChange }: ConfigFormProps) {
+export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessage, onClearMessage, saveTitle, onSaveTitleChange, chatMode }: ConfigFormProps) {
   const [config, setConfig] = useState<GameConfig>(() => {
     return migrateGameConfig(initialConfig);
   });
-  const [activeTab, setActiveTab] = useState<ConfigTabKey>('world');
+  const [activeTab, setActiveTab] = useState<ConfigTabKey>(chatMode ? 'network' : 'world');
   const [aiGenerating, setAiGenerating] = useState<Record<string, boolean>>({});
   const [localMessage, setLocalMessage] = useState<string | null>(null);
   const [fetchingModels, setFetchingModels] = useState(false);
@@ -431,7 +432,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
 
   return (
     <div className="max-w-2xl mx-auto">
-      <TabPanel activeTab={activeTab} onTabChange={setActiveTab}>
+      <TabPanel activeTab={activeTab} onTabChange={setActiveTab} chatMode={chatMode}>
         {activeTab === 'network' && (
           <div className="space-y-4">
             {config.network.apis.length > 1 && (
@@ -601,7 +602,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
 
         {activeTab === 'system' && (
           <div className="space-y-4">
-            {onSaveTitleChange !== undefined && (
+            {!chatMode && onSaveTitleChange !== undefined && (
               <FieldRow label="存档名">
                 <input
                   type="text"
