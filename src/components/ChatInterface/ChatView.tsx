@@ -84,6 +84,12 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
   const getNetworkConfig = useCallback(() => {
     const network = config.network;
     const activeApi = getActiveApi(network);
+    console.log('[ChatView] getNetworkConfig:', {
+      hasNetwork: !!network,
+      apisCount: network?.apis?.length,
+      selectedId: network?.selectedId,
+      activeApi: activeApi ? { id: activeApi.id, endpoint: activeApi.apiEndpoint?.substring(0, 50), hasKey: !!activeApi.apiKey, keyLen: activeApi.apiKey?.length, model: activeApi.modelName } : null,
+    });
     if (activeApi && activeApi.apiKey && activeApi.apiEndpoint) {
       return {
         apiKey: activeApi.apiKey,

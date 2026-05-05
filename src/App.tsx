@@ -308,17 +308,27 @@ export default function App() {
   const handleOpenChat = useCallback(async () => {
     let cfg = loadChatConfig();
     const activeApi = getActiveApi(cfg.network);
+    console.log('[App] handleOpenChat 初始配置:', {
+      apisCount: cfg.network?.apis?.length,
+      selectedId: cfg.network?.selectedId,
+      activeApi: activeApi ? { id: activeApi.id, hasKey: !!activeApi.apiKey, keyLen: activeApi.apiKey?.length, endpoint: activeApi.apiEndpoint?.substring(0, 50) } : null,
+    });
     if (!activeApi?.apiKey) {
       try {
         const latest = await getLatestSave();
+        console.log('[App] handleOpenChat 最新存档:', latest ? { id: latest.id, hasConfig: !!latest.metadata?.configSnapshot } : null);
         if (latest?.metadata?.configSnapshot?.network) {
           const latestApi = getActiveApi(latest.metadata.configSnapshot.network);
+          console.log('[App] handleOpenChat 最新存档的API:', latestApi ? { id: latestApi.id, hasKey: !!latestApi.apiKey, keyLen: latestApi.apiKey?.length } : null);
           if (latestApi?.apiKey) {
             cfg = { ...latest.metadata.configSnapshot };
             saveChatConfig(cfg);
+            console.log('[App] handleOpenChat 已从最新存档复制配置');
           }
         }
-      } catch {}
+      } catch (e) {
+        console.error('[App] handleOpenChat 获取最新存档失败:', e);
+      }
     }
     setChatConfig(cfg);
     setScreen('chat');
@@ -329,6 +339,11 @@ export default function App() {
   }, []);
 
   const handleSaveChatConfig = useCallback((newConfig: GameConfig) => {
+    console.log('[App] handleSaveChatConfig:', {
+      apisCount: newConfig.network?.apis?.length,
+      selectedId: newConfig.network?.selectedId,
+      apis: newConfig.network?.apis?.map(a => ({ id: a.id, hasKey: !!a.apiKey, keyLen: a.apiKey?.length, endpoint: a.apiEndpoint?.substring(0, 50) })),
+    });
     setChatConfig(newConfig);
     saveChatConfig(newConfig);
     setSaveMessage('设置已保存');
