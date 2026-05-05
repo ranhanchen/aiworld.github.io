@@ -13,6 +13,7 @@ import InputArea from '@/components/GameInterface/InputArea';
 import ContextMenu from '@/components/GameInterface/ContextMenu';
 import MessageEditor from '@/components/GameInterface/MessageEditor';
 import { startBackgroundAIRequest, hasPendingTask } from '@/services/backgroundAI';
+import ConfirmDialog from '@/components/Common/ConfirmDialog';
 
 interface GameViewProps {
   save: Save;
@@ -29,6 +30,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   const [currentRound, setCurrentRound] = useState(save.metadata.roundCount);
   const [contextMenuTarget, setContextMenuTarget] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingBufferRef = useRef('');
   const streamingMessageIdRef = useRef<string | null>(null);
@@ -316,35 +318,40 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         case 'resend': {
           if (message.role !== 'user') break;
 
-          const confirmed = window.confirm(
-            '重新发送将删除此消息及之后的所有消息，并重新调用AI生成。确定要继续吗？'
-          );
-          if (!confirmed) break;
+          setConfirmDialog({
+            message: '重新发送将删除此消息及之后的所有消息，并重新调用AI生成。确定要继续吗？',
+            onConfirm: () => {
+              setConfirmDialog(null);
+              const targetIndex = messages.findIndex((m) => m.id === message.id);
+              if (targetIndex === -1) return;
 
-          const targetIndex = messages.findIndex((m) => m.id === message.id);
-          if (targetIndex === -1) break;
+              const messagesToRemove = messages.slice(targetIndex);
+              for (const m of messagesToRemove) {
+                try { deleteMessage(m.id); } catch {}
+              }
 
-          const messagesToRemove = messages.slice(targetIndex);
-          for (const m of messagesToRemove) {
-            try { await deleteMessage(m.id); } catch {}
-          }
+              const keptMessages = messages.slice(0, targetIndex);
+              setMessages(keptMessages);
+              setCurrentRound(message.roundIndex);
+              setLoadingState('idle');
 
-          const keptMessages = messages.slice(0, targetIndex);
-          setMessages(keptMessages);
-          setCurrentRound(message.roundIndex);
-          setLoadingState('idle');
-
-          setTimeout(() => {
-            handleSendMessageRef.current(message.rawText);
-          }, 100);
+              setTimeout(() => {
+                handleSendMessageRef.current(message.rawText);
+              }, 100);
+            },
+          });
           break;
         }
 
         case 'delete': {
-          const confirmed = window.confirm('确定要删除这条消息吗？');
-          if (!confirmed) break;
-          setMessages((prev) => prev.filter((m) => m.id !== message.id));
-          await deleteMessage(message.id);
+          setConfirmDialog({
+            message: '确定要删除这条消息吗？',
+            onConfirm: async () => {
+              setConfirmDialog(null);
+              setMessages((prev) => prev.filter((m) => m.id !== message.id));
+              await deleteMessage(message.id);
+            },
+          });
           break;
         }
 
@@ -1187,6 +1194,14 @@ handleSendMessageRef.current = handleSendMessage;
           message={editingMessage}
           onSave={handleEditSave}
           onCancel={() => setEditingMessage(null)}
+        />
+      )}
+
+      {confirmDialog && (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
         />
       )}
     </div>

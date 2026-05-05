@@ -3,6 +3,7 @@ import type { Save } from '@/types/save';
 import { getAllSaves, deleteSave, exportSaves } from '@/db/repository';
 import SaveCard from '@/components/SaveManager/SaveCard';
 import ImportExport from '@/components/SaveManager/ImportExport';
+import ConfirmDialog from '@/components/Common/ConfirmDialog';
 
 interface SaveListProps {
   onPlaySave: (save: Save) => void;
@@ -17,6 +18,7 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [showImportExport, setShowImportExport] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   const loadSaves = useCallback(async () => {
     setViewState('loading');
@@ -36,14 +38,18 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
   }, [loadSaves]);
 
   const handleDelete = useCallback(async (id: string) => {
-    const confirmed = window.confirm('确定要删除这个存档吗？删除后无法恢复。');
-    if (!confirmed) return;
-    try {
-      await deleteSave(id);
-      setSaves((prev) => prev.filter((s) => s.id !== id));
-    } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : String(e));
-    }
+    setConfirmDialog({
+      message: '确定要删除这个存档吗？删除后无法恢复。',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          await deleteSave(id);
+          setSaves((prev) => prev.filter((s) => s.id !== id));
+        } catch (e) {
+          setErrorMessage(e instanceof Error ? e.message : String(e));
+        }
+      },
+    });
   }, []);
 
   const handleDownload = useCallback(async (save: Save) => {
@@ -151,6 +157,14 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
           />
         ))}
       </div>
+
+      {confirmDialog && (
+        <ConfirmDialog
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </div>
   );
 }

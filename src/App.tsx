@@ -81,9 +81,17 @@ export default function App() {
   const handleSaveConfig = useCallback(
     async (config: GameConfig) => {
       try {
+        const cleanConfig: GameConfig = {
+          ...config,
+          world: { ...config.world, customFields: Object.fromEntries(Object.entries(config.world.customFields).filter(([k]) => !k.startsWith('__new_') && k.trim() !== '')) },
+          aiRestriction: { ...config.aiRestriction, customFields: Object.fromEntries(Object.entries(config.aiRestriction.customFields).filter(([k]) => !k.startsWith('__new_') && k.trim() !== '')) },
+          character: { ...config.character, customFields: Object.fromEntries(Object.entries(config.character.customFields).filter(([k]) => !k.startsWith('__new_') && k.trim() !== '')) },
+          winCondition: { ...config.winCondition, customFields: Object.fromEntries(Object.entries(config.winCondition.customFields).filter(([k]) => !k.startsWith('__new_') && k.trim() !== '')) },
+        };
+
         if (editingSaveId) {
           const updated = await updateSave(editingSaveId, {
-            metadata: { title: saveTitle, configSnapshot: config },
+            metadata: { title: saveTitle, configSnapshot: cleanConfig },
           });
           if (updated) {
             setCurrentSave(updated);
@@ -100,7 +108,7 @@ export default function App() {
               title: saveTitle,
               description: '',
               coverColor: pickRandomCoverColor(),
-              configSnapshot: config,
+              configSnapshot: cleanConfig,
             },
           });
           setCurrentSave(save);

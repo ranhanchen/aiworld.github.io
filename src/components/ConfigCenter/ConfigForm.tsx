@@ -194,13 +194,20 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
     (section: 'world' | 'aiRestriction' | 'character' | 'winCondition') => {
       setConfig((prev) => {
         const sectionData = prev[section];
+        const existingKeys = Object.keys(sectionData.customFields);
+        let counter = 1;
+        let tempKey = `__new_${counter}`;
+        while (existingKeys.includes(tempKey)) {
+          counter++;
+          tempKey = `__new_${counter}`;
+        }
         return {
           ...prev,
           [section]: {
             ...sectionData,
             customFields: {
               ...sectionData.customFields,
-              '': '',
+              [tempKey]: '',
             },
           },
         };
@@ -218,11 +225,33 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
     ) => {
       setConfig((prev) => {
         const sectionData = prev[section];
-        const newCustomFields = { ...sectionData.customFields };
-        delete newCustomFields[oldKey];
-        if (newKey) {
-          newCustomFields[newKey] = value;
+        const entries = Object.entries(sectionData.customFields);
+        const newCustomFields: Record<string, string> = {};
+
+        for (const [k, v] of entries) {
+          if (k === oldKey) {
+            let actualNewKey = newKey;
+            if (!newKey.trim()) {
+              const otherKeys = entries.map(([ek]) => ek).filter((ek) => ek !== oldKey);
+              let counter = 1;
+              let tempKey = `__new_${counter}`;
+              while (otherKeys.includes(tempKey)) {
+                counter++;
+                tempKey = `__new_${counter}`;
+              }
+              actualNewKey = tempKey;
+            } else if (newKey !== oldKey) {
+              const otherKeys = entries.map(([ek]) => ek).filter((ek) => ek !== oldKey);
+              if (otherKeys.includes(newKey)) {
+                actualNewKey = oldKey;
+              }
+            }
+            newCustomFields[actualNewKey] = value;
+          } else {
+            newCustomFields[k] = v;
+          }
         }
+
         return {
           ...prev,
           [section]: {
@@ -975,21 +1004,24 @@ interface CustomFieldRowProps {
 }
 
 function CustomFieldRow({ fieldKey, value, onUpdate }: CustomFieldRowProps) {
+  const displayKey = fieldKey.startsWith('__new_') ? '' : fieldKey;
   return (
-    <div className="flex gap-2">
-      <input
-        type="text"
-        value={fieldKey}
-        onChange={(e) => onUpdate(e.target.value, value)}
-        className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        placeholder="属性名"
-      />
-      <input
-        type="text"
+    <div className="space-y-1.5">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={displayKey}
+          onChange={(e) => onUpdate(e.target.value, value)}
+          className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+          placeholder="属性名"
+        />
+      </div>
+      <textarea
         value={value}
         onChange={(e) => onUpdate(fieldKey, e.target.value)}
-        className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
         placeholder="属性值"
+        rows={2}
       />
     </div>
   );
