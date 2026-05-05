@@ -3,13 +3,18 @@ import { DB_NAME, STORE_SAVES, STORE_MESSAGES } from '@/config/constants';
 const DB_VERSION = 3;
 
 let db: IDBDatabase | null = null;
+let dbReady: Promise<IDBDatabase> | null = null;
 
 function openDatabase(): Promise<IDBDatabase> {
   if (db) {
     return Promise.resolve(db);
   }
 
-  return new Promise<IDBDatabase>((resolve, reject) => {
+  if (dbReady) {
+    return dbReady;
+  }
+
+  dbReady = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
@@ -46,65 +51,164 @@ function openDatabase(): Promise<IDBDatabase> {
     };
 
     request.onsuccess = (event: Event) => {
-      db = (event.target as IDBOpenDBRequest).result;
-      resolve(db);
+      const database = (event.target as IDBOpenDBRequest).result;
+
+      database.onclose = () => {
+        db = null;
+        dbReady = null;
+        console.warn('[database] IndexedDB 连接已关闭，下次操作将重新连接');
+      };
+
+      database.onerror = () => {
+        db = null;
+        dbReady = null;
+        console.error('[database] IndexedDB 连接异常');
+      };
+
+      database.onversionchange = () => {
+        db = null;
+        dbReady = null;
+        database.close();
+        console.warn('[database] IndexedDB 版本变更，连接已关闭');
+      };
+
+      db = database;
+      resolve(database);
     };
 
     request.onerror = (event: Event) => {
+      dbReady = null;
       reject(new Error(`IndexedDB open failed: ${(event.target as IDBOpenDBRequest).error?.message}`));
     };
+
+    request.onblocked = () => {
+      console.warn('[database] IndexedDB 升级被阻止，可能有其他标签页正在使用');
+    };
   });
+
+  return dbReady;
+}
+
+function invalidateConnection(): void {
+  db = null;
+  dbReady = null;
+}
+
+async function withRetry<T>(
+  operation: (database: IDBDatabase) => Promise<T>,
+  maxRetries: number = 2,
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const database = await openDatabase();
+      return await operation(database);
+    } catch (err: any) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      const isConnectionError =
+        err?.name === 'InvalidStateError' ||
+        err?.name === 'TransactionInactiveError' ||
+        err?.message?.includes('database was closed') ||
+        err?.message?.includes('Connection is closed') ||
+        err?.message?.includes('not active');
+
+      if (isConnectionError && attempt < maxRetries) {
+        console.warn(`[database] 操作失败 (尝试 ${attempt + 1}/${maxRetries})，重新连接...`, err.message);
+        invalidateConnection();
+        await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+        continue;
+      }
+
+      break;
+    }
+  }
+
+  throw lastError;
 }
 
 export async function getFromStore<T>(storeName: string, key: string): Promise<T | undefined> {
-  const database = await openDatabase();
-  return new Promise<T | undefined>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readonly');
-    const store = transaction.objectStore(storeName);
-    const request = store.get(key);
+  return withRetry((database) => {
+    return new Promise<T | undefined>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.get(key);
 
-    request.onsuccess = () => resolve(request.result as T | undefined);
-    request.onerror = () => reject(new Error(`Get failed for key ${key}`));
+        request.onsuccess = () => resolve(request.result as T | undefined);
+        request.onerror = () => reject(new Error(`Get failed for key ${key}`));
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => reject(new Error(`Transaction failed for get key ${key}`));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
 export async function putToStore<T>(storeName: string, value: T): Promise<void> {
-  const database = await openDatabase();
-  return new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.put(value);
+  return withRetry((database) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.put(value);
 
-    request.onsuccess = () => resolve();
-    request.onerror = (event) => {
-      const errorMsg = (event.target as any).error?.message || 'Unknown IndexedDB error';
-      console.error(`[database] putToStore failed (${storeName}):`, errorMsg, value);
-      reject(new Error(`Put failed: ${errorMsg}`));
-    };
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => {
+          const errorMsg = (event.target as any).error?.message || 'Unknown IndexedDB error';
+          console.error(`[database] putToStore failed (${storeName}):`, errorMsg, value);
+          reject(new Error(`Put failed: ${errorMsg}`));
+        };
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => reject(new Error(`Transaction failed for put in ${storeName}`));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
 export async function deleteFromStore(storeName: string, key: string): Promise<void> {
-  const database = await openDatabase();
-  return new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.delete(key);
+  return withRetry((database) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.delete(key);
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error(`Delete failed for key ${key}`));
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error(`Delete failed for key ${key}`));
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => reject(new Error(`Transaction failed for delete key ${key}`));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
 export async function getAllFromStore<T>(storeName: string): Promise<T[]> {
-  const database = await openDatabase();
-  return new Promise<T[]>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readonly');
-    const store = transaction.objectStore(storeName);
-    const request = store.getAll();
+  return withRetry((database) => {
+    return new Promise<T[]>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result as T[]);
-    request.onerror = () => reject(new Error('Get all operation failed'));
+        request.onsuccess = () => resolve((request.result as T[]) || []);
+        request.onerror = () => reject(new Error('Get all operation failed'));
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => reject(new Error(`Transaction failed for getAll in ${storeName}`));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
@@ -113,15 +217,37 @@ export async function getAllFromIndex<T>(
   indexName: string,
   value: IDBValidKey | IDBKeyRange,
 ): Promise<T[]> {
-  const database = await openDatabase();
-  return new Promise<T[]>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readonly');
-    const store = transaction.objectStore(storeName);
-    const index = store.index(indexName);
-    const request = index.getAll(value);
+  console.log('[database] getAllFromIndex 开始执行:', { storeName, indexName, value });
+  return withRetry((database) => {
+    return new Promise<T[]>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const index = store.index(indexName);
+        const request = index.getAll(value);
 
-    request.onsuccess = () => resolve(request.result as T[]);
-    request.onerror = (event: Event) => reject(new Error(`Get all from index ${indexName} failed: ${(event.target as IDBRequest).error?.message || 'Unknown error'}`));
+        request.onsuccess = () => {
+          const result = (request.result as T[]) || [];
+          console.log('[database] getAllFromIndex 请求成功:', { count: result.length });
+          resolve(result);
+        };
+        request.onerror = (event: Event) => {
+          const errorMsg = `Get all from index ${indexName} failed: ${(event.target as IDBRequest).error?.message || 'Unknown error'}`;
+          console.error('[database] getAllFromIndex 请求失败:', errorMsg);
+          reject(new Error(errorMsg));
+        };
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => {
+          const errorMsg = `Transaction failed for getAllFromIndex ${indexName}`;
+          console.error('[database] getAllFromIndex 事务失败:', errorMsg);
+          reject(new Error(errorMsg));
+        };
+      } catch (err) {
+        console.error('[database] getAllFromIndex 异常:', err);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
@@ -131,71 +257,115 @@ export async function getRangeFromIndex<T>(
   lower: unknown,
   upper: unknown,
 ): Promise<T[]> {
-  const database = await openDatabase();
-  const range = IDBKeyRange.bound(lower, upper);
+  return withRetry((database) => {
+    const range = IDBKeyRange.bound(lower, upper);
 
-  return new Promise<T[]>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readonly');
-    const store = transaction.objectStore(storeName);
-    const index = store.index(indexName);
-    const request = index.getAll(range);
+    return new Promise<T[]>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const index = store.index(indexName);
+        const request = index.getAll(range);
 
-    request.onsuccess = () => resolve(request.result as T[]);
-    request.onerror = () => reject(new Error(`Range query on ${indexName} failed`));
+        request.onsuccess = () => resolve((request.result as T[]) || []);
+        request.onerror = () => reject(new Error(`Range query on ${indexName} failed`));
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => reject(new Error(`Transaction failed for range query on ${indexName}`));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
 export async function countFromStore(storeName: string): Promise<number> {
-  const database = await openDatabase();
-  return new Promise<number>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readonly');
-    const store = transaction.objectStore(storeName);
-    const request = store.count();
+  return withRetry((database) => {
+    return new Promise<number>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.count();
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(new Error('Count operation failed'));
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(new Error('Count operation failed'));
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => reject(new Error(`Transaction failed for count in ${storeName}`));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
 export async function clearStore(storeName: string): Promise<void> {
-  const database = await openDatabase();
-  return new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.clear();
+  return withRetry((database) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.clear();
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error('Clear operation failed'));
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error('Clear operation failed'));
+
+        transaction.oncomplete = () => {};
+        transaction.onerror = () => reject(new Error(`Transaction failed for clear in ${storeName}`));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }
 
 export async function batchPut<T>(storeName: string, items: T[]): Promise<void> {
-  const database = await openDatabase();
-  return new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
+  if (items.length === 0) return;
 
-    let completed = 0;
-    let failed = false;
+  console.log('[database] batchPut 开始执行:', { storeName, itemsCount: items.length });
+  return withRetry((database) => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const transaction = database.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
 
-    for (const item of items) {
-      const request = store.put(item);
-      request.onsuccess = () => {
-        completed++;
-        if (!failed && completed === items.length) {
-          resolve();
+        let completed = 0;
+        let failed = false;
+        const total = items.length;
+
+        for (const item of items) {
+          const request = store.put(item);
+          request.onsuccess = () => {
+            completed++;
+            if (!failed && completed === total) {
+              console.log('[database] batchPut 全部完成:', { completed, total });
+              resolve();
+            }
+          };
+          request.onerror = () => {
+            if (!failed) {
+              failed = true;
+              const errorMsg = `Batch put operation failed at item ${completed + 1}/${total}`;
+              console.error('[database] batchPut 失败:', errorMsg);
+              reject(new Error(errorMsg));
+            }
+          };
         }
-      };
-      request.onerror = () => {
-        if (!failed) {
-          failed = true;
-          reject(new Error('Batch put operation failed'));
-        }
-      };
-    }
 
-    if (items.length === 0) {
-      resolve();
-    }
+        transaction.oncomplete = () => {
+          if (!failed && completed === total) {
+            resolve();
+          }
+        };
+        transaction.onerror = () => {
+          if (!failed) {
+            failed = true;
+            reject(new Error('Batch put transaction failed'));
+          }
+        };
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   });
 }

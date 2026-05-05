@@ -14,12 +14,15 @@ export default function ImportExport({ onComplete }: ImportExportProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    console.log('[ImportExport] 开始导入文件:', { name: file.name, size: file.size });
     setImporting(true);
     setMessage(null);
 
     try {
       const text = await file.text();
+      console.log('[ImportExport] 文件读取成功，长度:', text.length);
       const result = await importSaves(text);
+      console.log('[ImportExport] 导入结果:', result);
 
       if (result.imported > 0) {
         setMessage({
@@ -32,7 +35,8 @@ export default function ImportExport({ onComplete }: ImportExportProps) {
       } else {
         setMessage({ type: 'error', text: '没有可导入的数据' });
       }
-    } catch {
+    } catch (e) {
+      console.error('[ImportExport] 导入异常:', e);
       setMessage({ type: 'error', text: '文件读取失败，请检查文件格式' });
     } finally {
       setImporting(false);

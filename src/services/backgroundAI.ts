@@ -1,8 +1,10 @@
 import { createNonStreamingRequest } from '@/config/api';
 import { createMessage, updateMessage, updateSave } from '@/db/repository';
+import { putToStore } from '@/db/database';
 import { parseMessageSegments } from '@/utils/parsers';
 import ParserWorker from '@/workers/parser.worker?worker';
 import type { Message, MessageSegment } from '@/types/message';
+import { STORE_MESSAGES } from '@/config/constants';
 
 interface PendingTask {
   saveId: string;
@@ -14,6 +16,20 @@ interface PendingTask {
 }
 
 const pendingTasks = new Map<string, PendingTask>();
+
+const memoryMessageStore = new Map<string, Message>();
+
+function storeMemoryMessage(message: Message): void {
+  memoryMessageStore.set(message.id, message);
+}
+
+function getMemoryMessage(id: string): Message | undefined {
+  return memoryMessageStore.get(id);
+}
+
+function removeMemoryMessage(id: string): void {
+  memoryMessageStore.delete(id);
+}
 
 function parseWithWorkerFallback(messageId: string, rawText: string): Promise<{ segments: MessageSegment[]; isValid: boolean }> {
   return new Promise((resolve) => {
@@ -91,6 +107,9 @@ export function startBackgroundAIRequest(params: {
     updatedAt: now,
   };
 
+  storeMemoryMessage(userMessage);
+  storeMemoryMessage(aiMessage);
+
   const controller = new AbortController();
 
   const completion = (async () => {
@@ -106,8 +125,9 @@ export function startBackgroundAIRequest(params: {
       console.warn('[BackgroundAI] 用户消息写入DB失败:', e);
     }
 
+    let dbAiMessageId: string | null = null;
     try {
-      await createMessage({
+      const dbMsg = await createMessage({
         saveId,
         roundIndex,
         role: 'ai',
@@ -115,6 +135,13 @@ export function startBackgroundAIRequest(params: {
         segments: [],
         status: 'streaming',
       });
+      dbAiMessageId = dbMsg.id;
+
+      const memoryAi = getMemoryMessage(aiMessage.id);
+      if (memoryAi) {
+        storeMemoryMessage({ ...memoryAi, id: dbAiMessageId });
+        removeMemoryMessage(aiMessage.id);
+      }
     } catch (e) {
       console.warn('[BackgroundAI] AI消息写入DB失败:', e);
     }
@@ -135,22 +162,45 @@ export function startBackgroundAIRequest(params: {
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error('[BackgroundAI] API请求失败:', err);
-        try { await updateMessage(aiMessage.id, { status: 'error' }); } catch {}
+        const targetId = dbAiMessageId || aiMessage.id;
+        try { await updateMessage(targetId, { status: 'error' }); } catch {}
+        const memoryAi = getMemoryMessage(targetId);
+        if (memoryAi) {
+          storeMemoryMessage({ ...memoryAi, status: 'error' });
+        }
       }
       pendingTasks.delete(saveId);
       return;
     }
 
-    const { segments, isValid } = await parseWithWorkerFallback(aiMessage.id, fullText);
+    const { segments, isValid } = await parseWithWorkerFallback(
+      dbAiMessageId || aiMessage.id,
+      fullText,
+    );
+
+    const targetId = dbAiMessageId || aiMessage.id;
+    const completedMessage: Message = {
+      id: targetId,
+      saveId,
+      roundIndex,
+      role: 'ai',
+      rawText: fullText,
+      segments: isValid ? segments : [],
+      status: 'completed',
+      createdAt: now,
+      updatedAt: Date.now(),
+    };
 
     try {
-      await updateMessage(aiMessage.id, {
+      await updateMessage(targetId, {
         rawText: fullText,
         segments: isValid ? segments : [],
         status: 'completed',
       });
+      removeMemoryMessage(targetId);
     } catch (e) {
-      console.warn('[BackgroundAI] 更新AI消息DB失败:', e);
+      console.warn('[BackgroundAI] 更新AI消息DB失败，保留在内存中:', e);
+      storeMemoryMessage(completedMessage);
     }
 
     try {
@@ -174,4 +224,31 @@ export function startBackgroundAIRequest(params: {
   });
 
   return { userMessage, aiMessage, completion };
+}
+
+export function getMemoryMessagesForSave(saveId: string): Message[] {
+  const result: Message[] = [];
+  for (const msg of memoryMessageStore.values()) {
+    if (msg.saveId === saveId) {
+      result.push(msg);
+    }
+  }
+  return result.sort((a, b) => a.roundIndex - b.roundIndex);
+}
+
+export async function flushMemoryMessagesToDB(saveId: string): Promise<number> {
+  const messages = getMemoryMessagesForSave(saveId);
+  let flushed = 0;
+
+  for (const msg of messages) {
+    try {
+      await putToStore(STORE_MESSAGES, msg);
+      removeMemoryMessage(msg.id);
+      flushed++;
+    } catch (e) {
+      console.warn('[BackgroundAI] flush内存消息到DB失败:', msg.id, e);
+    }
+  }
+
+  return flushed;
 }

@@ -1,13 +1,72 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Component, type ReactNode, type ErrorInfo } from 'react';
 import type { Save } from '@/types/save';
 import type { GameConfig } from '@/types/config';
 import { getActiveApi } from '@/types/config';
-import { createSave, getLatestSave, getSave, updateSave } from '@/db/repository';
+import { createSave, getLatestSave, getSave, updateSave, diagnoseDatabase } from '@/db/repository';
 import { COVER_COLORS } from '@/config/constants';
 import SaveList from '@/components/SaveManager/SaveList';
 import ConfigForm from '@/components/ConfigCenter/ConfigForm';
 import GameView from '@/components/GameInterface/GameView';
 import MemoryOverride from '@/components/MemoryPanel/MemoryOverride';
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class GlobalErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[App] 全局错误边界捕获异常:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-[100dvh] flex items-center justify-center bg-surface dark:bg-surface-dark p-4">
+          <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-text-primary dark:text-text-primary-dark mb-2">
+              应用遇到了问题
+            </h2>
+            <p className="text-sm text-text-secondary dark:text-text-secondary-dark mb-4">
+              发生了一个意外错误，你的数据应该没有丢失。请尝试刷新页面。
+            </p>
+            <p className="text-xs text-red-500 dark:text-red-400 mb-4 font-mono break-all">
+              {this.state.error?.message || '未知错误'}
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-6 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+            >
+              刷新页面
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 type AppScreen = 'saves' | 'config' | 'game';
 
@@ -61,6 +120,25 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('[App] 未处理的Promise拒绝:', event.reason);
+      event.preventDefault();
+    };
+    const handleUnhandledError = (event: ErrorEvent) => {
+      console.error('[App] 未处理的错误:', event.error || event.message);
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('error', handleUnhandledError);
+
+    (window as any).diagnoseDatabase = diagnoseDatabase;
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('error', handleUnhandledError);
+    };
+  }, []);
+
   const handleCreateNew = useCallback(async () => {
     setEditingSaveId(null);
     setSaveTitle('');
@@ -97,9 +175,21 @@ export default function App() {
             setCurrentSave(updated);
             try { localStorage.setItem(`save_backup_${editingSaveId}`, JSON.stringify(updated)); } catch {}
           } else {
-            console.error('[App] handleSaveConfig: updateSave 返回 undefined');
-            setSaveMessage('保存失败，请重试');
-            setTimeout(() => setSaveMessage(null), 2000);
+            try {
+              const backup = localStorage.getItem(`save_backup_${editingSaveId}`);
+              if (backup) {
+                const backupSave = JSON.parse(backup) as Save;
+                const patched: Save = {
+                  ...backupSave,
+                  metadata: { ...backupSave.metadata, title: saveTitle, configSnapshot: cleanConfig },
+                  updatedAt: Date.now(),
+                };
+                setCurrentSave(patched);
+                localStorage.setItem(`save_backup_${editingSaveId}`, JSON.stringify(patched));
+              }
+            } catch {}
+            setSaveMessage('数据库保存失败，已备份到本地');
+            setTimeout(() => setSaveMessage(null), 3000);
             return;
           }
         } else {
@@ -120,8 +210,12 @@ export default function App() {
         setTimeout(() => setSaveMessage(null), 2000);
       } catch (err) {
         console.error('[App] handleSaveConfig 异常:', err);
-        setSaveMessage('保存失败: ' + (err instanceof Error ? err.message : String(err)));
-        setTimeout(() => setSaveMessage(null), 3000);
+        try {
+          const emergencyConfig = JSON.stringify(config);
+          localStorage.setItem('ta_emergency_config', emergencyConfig);
+        } catch {}
+        setSaveMessage('保存失败，配置已临时备份。请刷新页面重试: ' + (err instanceof Error ? err.message : String(err)));
+        setTimeout(() => setSaveMessage(null), 5000);
       }
     },
     [editingSaveId, saveTitle],
@@ -209,6 +303,7 @@ export default function App() {
   }, [screen, showMemory, handleCancelConfig, handleCloseMemory]);
 
   return (
+    <GlobalErrorBoundary>
     <div className="min-h-[100dvh] bg-surface dark:bg-surface-dark">
       {screen === 'saves' && (
         <div className="max-w-4xl mx-auto px-4 py-6">
@@ -286,5 +381,6 @@ export default function App() {
         </>
       )}
     </div>
+    </GlobalErrorBoundary>
   );
 }
