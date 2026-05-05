@@ -674,9 +674,9 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               placeholder="描述故事中关键NPC、势力首领、重要角色等..."
               multiline
             />
-            {Object.entries(config.world.customFields).map(([key, value], idx) => (
+            {Object.entries(config.world.customFields).map(([key, value]) => (
               <CustomFieldRow
-                key={`world-cf-${idx}`}
+                key={`world-cf-${key}`}
                 fieldKey={key}
                 value={value}
                 onUpdate={(newKey, newVal) => updateCustomField('world', key, newKey, newVal)}
@@ -711,9 +711,9 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
                 rows={6}
               />
             </FieldRow>
-            {Object.entries(config.aiRestriction.customFields).map(([key, value], idx) => (
+            {Object.entries(config.aiRestriction.customFields).map(([key, value]) => (
               <CustomFieldRow
-                key={`airestriction-cf-${idx}`}
+                key={`airestriction-cf-${key}`}
                 fieldKey={key}
                 value={value}
                 onUpdate={(newKey, newVal) => updateCustomField('aiRestriction', key, newKey, newVal)}
@@ -784,9 +784,9 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               placeholder="描述角色的外貌特征..."
               multiline
             />
-            {Object.entries(config.character.customFields).map(([key, value], idx) => (
+            {Object.entries(config.character.customFields).map(([key, value]) => (
               <CustomFieldRow
-                key={`char-cf-${idx}`}
+                key={`char-cf-${key}`}
                 fieldKey={key}
                 value={value}
                 onUpdate={(newKey, newVal) => updateCustomField('character', key, newKey, newVal)}
@@ -881,9 +881,9 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               </button>
             </div>
 
-            {Object.entries(config.winCondition.customFields).map(([key, value], idx) => (
+            {Object.entries(config.winCondition.customFields).map(([key, value]) => (
               <CustomFieldRow
-                key={`wc-cf-${idx}`}
+                key={`wc-cf-${key}`}
                 fieldKey={key}
                 value={value}
                 onUpdate={(newKey, newVal) => updateCustomField('winCondition', key, newKey, newVal)}
