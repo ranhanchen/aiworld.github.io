@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Save } from '@/types/save';
 import type { Message, MessageSegment } from '@/types/message';
 import { getActiveApi } from '@/types/config';
@@ -137,10 +137,14 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     try {
       const msgs = await getMessagesBySaveId(save.id, CONTEXT_WINDOW_SIZE * 2);
       const memoryMsgs = getMemoryMessagesForSave(save.id);
-      const dbIds = new Set(msgs.map((m) => m.id));
       const merged = [...msgs];
       for (const mm of memoryMsgs) {
-        if (!dbIds.has(mm.id)) merged.push(mm);
+        const existingIdx = merged.findIndex((m) => m.id === mm.id);
+        if (existingIdx >= 0) {
+          merged[existingIdx] = mm;
+        } else {
+          merged.push(mm);
+        }
       }
       merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
       setMessages(merged);
@@ -200,9 +204,15 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         try {
           const allMsgs = await getMessagesBySaveId(latestSave.id);
           const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-          const dbIds = new Set(allMsgs.map((m) => m.id));
           const merged = [...allMsgs];
-          for (const mm of memoryMsgs) { if (!dbIds.has(mm.id)) merged.push(mm); }
+          for (const mm of memoryMsgs) {
+            const existingIdx = merged.findIndex((m) => m.id === mm.id);
+            if (existingIdx >= 0) {
+              merged[existingIdx] = mm;
+            } else {
+              merged.push(mm);
+            }
+          }
           merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
           setMessages(merged);
         } catch {
@@ -222,12 +232,6 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       setLoadingState('error');
     }
   }, [currentRound, save, messages, loadingState, getNetworkConfig]);
-
-  const isLastAiMessage = useMemo(() => {
-    const aiMsgs = messages.filter((m) => m.role === 'ai');
-    if (aiMsgs.length === 0) return false;
-    return aiMsgs[aiMsgs.length - 1].id === contextMenuTarget?.id;
-  }, [messages, contextMenuTarget]);
 
   const handleRegenerateInPlace = useCallback(async (aiMessage: Message) => {
     const currentSave = saveRef.current;
@@ -465,7 +469,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         saveId: latestSave.id, roundIndex, userRawText: CONTINUE_STORY_PROMPT, chatMessages, apiEndpoint, apiKey, modelName, temperature, topP,
       });
 
-      setMessages((prev) => [...prev, { ...userMessage, rawText: '（继续推动剧情）' }, aiMessage]);
+      setMessages((prev) => [...prev, userMessage, aiMessage]);
       setCurrentRound(roundIndex);
       setLoadingState('sending');
       streamingMessageIdRef.current = aiMessage.id;
@@ -474,9 +478,15 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         try {
           const allMsgs = await getMessagesBySaveId(latestSave.id);
           const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-          const dbIds = new Set(allMsgs.map((m) => m.id));
           const merged = [...allMsgs];
-          for (const mm of memoryMsgs) { if (!dbIds.has(mm.id)) merged.push(mm); }
+          for (const mm of memoryMsgs) {
+            const existingIdx = merged.findIndex((m) => m.id === mm.id);
+            if (existingIdx >= 0) {
+              merged[existingIdx] = mm;
+            } else {
+              merged.push(mm);
+            }
+          }
           merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
           setMessages(merged);
         } catch {
@@ -536,9 +546,15 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       try {
         const allMsgs = await getMessagesBySaveId(latestSave.id);
         const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-        const dbIds = new Set(allMsgs.map((m) => m.id));
         const merged = [...allMsgs];
-        for (const mm of memoryMsgs) { if (!dbIds.has(mm.id)) merged.push(mm); }
+        for (const mm of memoryMsgs) {
+          const existingIdx = merged.findIndex((m) => m.id === mm.id);
+          if (existingIdx >= 0) {
+            merged[existingIdx] = mm;
+          } else {
+            merged.push(mm);
+          }
+        }
         merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
         setMessages(merged);
       } catch { setMessages(messages); }
@@ -658,7 +674,6 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       {contextMenuTarget && (
         <ContextMenu
           message={contextMenuTarget}
-          isLastAiMessage={isLastAiMessage}
           onAction={(action) => handleContextMenuAction(action, contextMenuTarget!)}
           onClose={() => setContextMenuTarget(null)}
         />

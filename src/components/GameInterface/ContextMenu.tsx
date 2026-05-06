@@ -3,12 +3,11 @@ import type { Message } from '@/types/message';
 
 interface ContextMenuProps {
   message: Message;
-  isLastAiMessage: boolean;
   onAction: (action: string) => void;
   onClose: () => void;
 }
 
-export default function ContextMenu({ message, isLastAiMessage, onAction, onClose }: ContextMenuProps) {
+export default function ContextMenu({ message, onAction, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -47,7 +46,7 @@ export default function ContextMenu({ message, isLastAiMessage, onAction, onClos
     { id: 'edit', label: '编辑消息', show: true },
     { id: 'resend', label: '重新发送', show: !isAiMessage },
     { id: 'delete', label: '删除消息', show: true, danger: true },
-    { id: 'regenerate', label: '重新生成', show: isAiMessage && isLastAiMessage },
+    { id: 'regenerate', label: '重新生成', show: isAiMessage },
     { id: 'rewrite_longer', label: '详细重写', show: isAiMessage },
     { id: 'rewrite_shorter', label: '简略重写', show: isAiMessage },
   ];

@@ -5,18 +5,50 @@ interface MessageBlockProps {
 }
 
 export default function MessageBlock({ message }: MessageBlockProps) {
-  if (!message || !message.segments || message.segments.length === 0) {
-    return (
-      <div className="flex flex-col gap-1 mb-4">
-        {renderRoleChip(message.role)}
-        <div className="px-4 py-3 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-500 text-sm">
-          消息片段未生成
-        </div>
-      </div>
-    );
-  }
+  if (!message) return null;
 
   const isUser = message.role === 'user';
+  const hasSegments = message.segments && message.segments.length > 0;
+  const hasRawText = message.rawText && message.rawText.trim().length > 0;
+  const isStreaming = message.status === 'streaming';
+
+  if (!hasSegments) {
+    if (isUser && hasRawText) {
+      return (
+        <div className="flex flex-col items-end gap-1 mb-4">
+          {renderRoleChip('user')}
+          <div className="max-w-[85%] bg-accent dark:bg-accent-dark text-white rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-sm">
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.rawText}</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (isStreaming && !hasRawText) {
+      return (
+        <div className="flex flex-col items-start gap-1 mb-4">
+          {renderRoleChip('ai')}
+          <div className="px-4 py-3 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center gap-2">
+            <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+            <span className="text-sm text-text-secondary dark:text-text-secondary-dark">AI 正在生成...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (hasRawText) {
+      return (
+        <div className="flex flex-col items-start gap-1 mb-4">
+          {renderRoleChip('ai')}
+          <div className="max-w-[85%] bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm">
+            <p className="text-sm text-text-primary dark:text-text-primary-dark whitespace-pre-wrap leading-relaxed">{message.rawText}</p>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  }
 
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1 mb-4`}>

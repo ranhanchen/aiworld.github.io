@@ -115,13 +115,17 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
     return { apiKey: '', apiEndpoint: '', modelName: '', temperature: 0.8, topP: 0.95 };
   }, [config.network]);
 
-  const handleSend = useCallback(async (text: string) => {
+  const sendRequest = useCallback(async (
+    text: string,
+    contextMessages: ChatMessage[],
+    opts?: { force?: boolean },
+  ) => {
     const { apiEndpoint, apiKey, modelName, temperature, topP } = getNetworkConfig();
     if (!apiKey || !apiEndpoint) {
       setLoadingState('error');
       return;
     }
-    if (loadingState === 'sending') return;
+    if (!opts?.force && loadingState === 'sending') return;
 
     const userMsg: ChatMessage = {
       id: `chat_u_${Date.now()}`,
@@ -166,7 +170,7 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
     }
 
     chatHistory.push(
-      ...messages.map((m) => ({
+      ...contextMessages.map((m) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content,
       })),
@@ -204,7 +208,11 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
     } finally {
       abortControllerRef.current = null;
     }
-  }, [messages, loadingState, getNetworkConfig]);
+  }, [loadingState, getNetworkConfig, config.aiRestriction]);
+
+  const handleSend = useCallback(async (text: string) => {
+    await sendRequest(text, messages);
+  }, [messages, sendRequest]);
 
   const handleContextMenuAction = useCallback((action: string, message: ChatMessage) => {
     setContextMenuTarget(null);
@@ -252,8 +260,7 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
             if (targetIndex === -1) return;
             const keptMessages = messages.slice(0, targetIndex);
             setMessages(keptMessages);
-            setLoadingState('idle');
-            setTimeout(() => handleSend(message.content), 100);
+            sendRequest(message.content, keptMessages, { force: true });
           },
         });
         break;
@@ -270,14 +277,13 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
             setConfirmDialog(null);
             const filteredMessages = messages.filter((m) => m.createdAt < message.createdAt);
             setMessages(filteredMessages);
-            setLoadingState('idle');
-            setTimeout(() => handleSend(prevUserMsg.content), 100);
+            sendRequest(prevUserMsg.content, filteredMessages, { force: true });
           },
         });
         break;
       }
     }
-  }, [messages, handleSend]);
+  }, [messages, sendRequest]);
 
   const handleEditSave = useCallback((editedText: string) => {
     if (!editingMessage) return;
@@ -419,7 +425,6 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
       {contextMenuGameMessage && contextMenuTarget && (
         <ContextMenu
           message={contextMenuGameMessage}
-          isLastAiMessage={messages.length > 0 && messages[messages.length - 1]?.id === contextMenuTarget.id && contextMenuTarget.role === 'assistant'}
           onAction={(action) => handleContextMenuAction(action, contextMenuTarget)}
           onClose={() => setContextMenuTarget(null)}
         />
