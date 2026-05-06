@@ -38,6 +38,22 @@ function tryParseSingleItem(item: unknown): MessageSegment | null {
   return segment;
 }
 
+function extractJsonFromMarkdown(input: string): string {
+  const trimmed = input.trim();
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced && fenced[1]) {
+    return fenced[1].trim();
+  }
+
+  const inline = trimmed.match(/`([\s\S]*?)`/);
+  if (inline && inline[1]) {
+    return inline[1].trim();
+  }
+
+  return trimmed;
+}
+
 export function parseMessageSegments(rawText: string): {
   segments: MessageSegment[];
   isValid: boolean;
@@ -48,8 +64,8 @@ export function parseMessageSegments(rawText: string): {
   }
 
   try {
-    const trimmed = rawText.trim();
-    const parsed: unknown = JSON.parse(trimmed);
+    const jsonText = extractJsonFromMarkdown(rawText);
+    const parsed: unknown = JSON.parse(jsonText);
 
     let items: unknown[];
     if (Array.isArray(parsed)) {

@@ -116,11 +116,12 @@ export default function VirtualMessageList({
         {messages.map((msg) => {
           if (HIDDEN_PROMPTS.includes(msg.rawText)) return null;
           return (
-            <MessageBlock
+            <div
               key={msg.id}
-              message={msg}
-              onLongPress={onMessageLongPress}
-            />
+              onContextMenu={(e) => { e.preventDefault(); onMessageLongPress(msg); }}
+            >
+              <MessageBlock message={msg} />
+            </div>
           );
         })}
       </div>

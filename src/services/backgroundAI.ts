@@ -82,9 +82,10 @@ export function startBackgroundAIRequest(params: {
   abortPendingTask(saveId);
 
   const now = Date.now();
+  const batchId = `msg_${now}`;
 
   const userMessage: Message = {
-    id: `msg_u_${now}`,
+    id: `${batchId}_0`,
     saveId,
     roundIndex,
     role: 'user',
@@ -96,7 +97,7 @@ export function startBackgroundAIRequest(params: {
   };
 
   const aiMessage: Message = {
-    id: `msg_a_${now}`,
+    id: `${batchId}_1`,
     saveId,
     roundIndex,
     role: 'ai',
@@ -233,7 +234,7 @@ export function getMemoryMessagesForSave(saveId: string): Message[] {
       result.push(msg);
     }
   }
-  return result.sort((a, b) => a.roundIndex - b.roundIndex);
+  return result.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
 }
 
 export async function flushMemoryMessagesToDB(saveId: string): Promise<number> {

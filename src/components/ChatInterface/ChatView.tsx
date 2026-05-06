@@ -264,10 +264,16 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
         const prevUserMsg = messages[messages.indexOf(message) - 1];
         if (!prevUserMsg || prevUserMsg.role !== 'user') break;
 
-        const filteredMessages = messages.filter((m) => m.createdAt < message.createdAt);
-        setMessages(filteredMessages);
-        setLoadingState('idle');
-        setTimeout(() => handleSend(prevUserMsg.content), 100);
+        setConfirmDialog({
+          message: '重新生成将使用此消息之前的对话上下文重新调用AI。当前AI回复将被替换，其他消息不受影响。确定要继续吗？',
+          onConfirm: () => {
+            setConfirmDialog(null);
+            const filteredMessages = messages.filter((m) => m.createdAt < message.createdAt);
+            setMessages(filteredMessages);
+            setLoadingState('idle');
+            setTimeout(() => handleSend(prevUserMsg.content), 100);
+          },
+        });
         break;
       }
     }
