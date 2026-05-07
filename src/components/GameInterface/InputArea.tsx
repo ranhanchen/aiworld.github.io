@@ -58,7 +58,7 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
     [handleSend, disabled],
   );
 
-  const showApiSelector = apis && apis.length > 1 && onSelectApi;
+  const showApiSelector = apis && apis.length > 0 && onSelectApi;
 
   return (
     <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2">

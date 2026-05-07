@@ -41,14 +41,61 @@ function tryParseSingleItem(item: unknown): MessageSegment | null {
 function extractJsonFromMarkdown(input: string): string {
   const trimmed = input.trim();
 
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced && fenced[1]) {
-    return fenced[1].trim();
+  const fencedRegex = /```(?:json)?\s*\n?([\s\S]*?)```/g;
+  let bestContent = '';
+  let bestScore = -1;
+  let match: RegExpExecArray | null;
+
+  while ((match = fencedRegex.exec(trimmed)) !== null) {
+    const content = match[1].trim();
+    try {
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        if (parsed.length > bestScore) {
+          bestScore = parsed.length;
+          bestContent = content;
+        }
+      } else if (parsed && typeof parsed === 'object' && 'type' in parsed) {
+        if (bestScore < 1) {
+          bestScore = 1;
+          bestContent = content;
+        }
+      }
+    } catch {
+      // ignore malformed JSON in this block, try next
+    }
+  }
+
+  if (bestScore > 0) {
+    return bestContent;
   }
 
   const inline = trimmed.match(/`([\s\S]*?)`/);
   if (inline && inline[1]) {
-    return inline[1].trim();
+    const inlineContent = inline[1].trim();
+    try {
+      JSON.parse(inlineContent);
+      return inlineContent;
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch {
+    // ignore
+  }
+
+  const jsonLike = trimmed.match(/(\[[\s\S]*\]|\{[\s\S]*\})$/);
+  if (jsonLike) {
+    try {
+      JSON.parse(jsonLike[1]);
+      return jsonLike[1];
+    } catch {
+      // ignore
+    }
   }
 
   return trimmed;

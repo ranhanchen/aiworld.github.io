@@ -4,6 +4,7 @@ import type { GameConfig } from '@/types/config';
 import { getActiveApi } from '@/types/config';
 import { createSave, getLatestSave, getSave, updateSave, diagnoseDatabase } from '@/db/repository';
 import { COVER_COLORS, DEFAULT_GAME_CONFIG } from '@/config/constants';
+import { hasAnyPendingTask } from '@/services/backgroundAI';
 import SaveList from '@/components/SaveManager/SaveList';
 import ConfigForm from '@/components/ConfigCenter/ConfigForm';
 import GameView from '@/components/GameInterface/GameView';
@@ -139,6 +140,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasAnyPendingTask()) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('[App] 未处理的Promise拒绝:', event.reason);
       event.preventDefault();
@@ -152,6 +160,7 @@ export default function App() {
     (window as any).diagnoseDatabase = diagnoseDatabase;
 
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       window.removeEventListener('error', handleUnhandledError);
     };

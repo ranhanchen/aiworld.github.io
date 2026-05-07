@@ -123,7 +123,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
 
     case 'action':
       return (
-        <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center my-1 font-sans whitespace-pre-wrap">
+        <p className="text-sm text-gray-500 dark:text-gray-400 text-center my-1 font-sans whitespace-pre-wrap">
           * {segment.content}
         </p>
       );

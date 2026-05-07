@@ -52,18 +52,28 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   }, [INPUT_DRAFT_KEY]);
 
   const parseWithFallback = useCallback(async (messageId: string, rawText: string): Promise<{ segments: MessageSegment[]; isValid: boolean }> => {
-    try {
-      const parserWorker = new ParserWorker();
-      const result = await new Promise<{ segments: MessageSegment[]; isValid: boolean }>((resolve, reject) => {
-        parserWorker.onmessage = (workerEvent: MessageEvent) => resolve(workerEvent.data);
-        parserWorker.onerror = (err) => reject(err);
+    return new Promise((resolve) => {
+      try {
+        const parserWorker = new ParserWorker();
+        const timer = setTimeout(() => {
+          parserWorker.terminate();
+          resolve(parseMessageSegments(rawText));
+        }, 5000);
+        parserWorker.onmessage = (workerEvent: MessageEvent) => {
+          clearTimeout(timer);
+          parserWorker.terminate();
+          resolve(workerEvent.data);
+        };
+        parserWorker.onerror = () => {
+          clearTimeout(timer);
+          parserWorker.terminate();
+          resolve(parseMessageSegments(rawText));
+        };
         parserWorker.postMessage({ id: messageId, rawText });
-      });
-      return result;
-    } catch (workerError) {
-      console.warn('[GameView] ParserWorker失败，回退到主线程解析:', workerError);
-      return parseMessageSegments(rawText);
-    }
+      } catch {
+        resolve(parseMessageSegments(rawText));
+      }
+    });
   }, []);
 
   const getNetworkConfig = useCallback(() => {
@@ -147,6 +157,23 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         }
       }
       merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
+
+      const orphans: Message[] = [];
+      for (const msg of merged) {
+        if (msg.role === 'ai' && msg.status === 'streaming' && (!msg.rawText || msg.rawText.trim() === '')) {
+          msg.status = 'error';
+          msg.rawText = '（AI回复生成中断 - 页面在生成过程中被关闭或刷新）';
+          msg.updatedAt = Date.now();
+          orphans.push(msg);
+        }
+      }
+      if (orphans.length > 0) {
+        console.warn('[GameView] 检测到孤魂消息（上轮生成中断）:', orphans.length);
+        for (const orphan of orphans) {
+          updateMessage(orphan.id, { status: 'error', rawText: orphan.rawText }).catch(() => {});
+        }
+      }
+
       setMessages(merged);
       setHasMoreMessages(msgs.length >= CONTEXT_WINDOW_SIZE * 2);
       setCurrentRound(save.metadata.roundCount);
@@ -191,11 +218,11 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       const latestSave = saveRef.current;
       const chatMessages = buildChatContext(messages, { role: 'user', rawText: text } as Message, latestSave);
 
-      const { userMessage, aiMessage, completion } = startBackgroundAIRequest({
+      const { aiMessage, completion } = startBackgroundAIRequest({
         saveId: latestSave.id, roundIndex, userRawText: text, chatMessages, apiEndpoint, apiKey, modelName, temperature, topP,
       });
 
-      setMessages((prev) => [...prev, userMessage, aiMessage]);
+      setMessages((prev) => [...prev, aiMessage]);
       setCurrentRound(roundIndex);
       setLoadingState('sending');
       streamingMessageIdRef.current = aiMessage.id;
@@ -563,15 +590,25 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     }).catch(() => setLoadingState('error'));
   }, [messages, save, getNetworkConfig]);
 
+  function stripFormatting(text: string): string {
+    return text
+      .replace(/^\[场景\]\s*/, '')
+      .replace(/^\[系统\]\s*/, '')
+      .replace(/^【[^】]*】/, '')
+      .replace(/^\*/, '')
+      .replace(/\*$/, '');
+  }
+
   function parseEditedTextToSegments(editedText: string, originalSegments: MessageSegment[]): MessageSegment[] {
     if (!editedText.trim()) return originalSegments;
     const lines = editedText.split('\n').filter(l => l.trim());
     if (lines.length <= 1) {
-      if (originalSegments.length === 1) return [{ ...originalSegments[0], content: editedText }];
-      return [{ type: 'scene' as const, content: editedText }];
+      const cleaned = stripFormatting(editedText);
+      if (originalSegments.length === 1) return [{ ...originalSegments[0], content: cleaned }];
+      return [{ type: 'scene' as const, content: cleaned }];
     }
     return originalSegments.map((seg, i) =>
-      i < lines.length ? { ...seg, content: lines[i] } : seg
+      i < lines.length ? { ...seg, content: stripFormatting(lines[i]) } : seg
     );
   }
 

@@ -58,6 +58,10 @@ export function hasPendingTask(saveId: string): boolean {
   return pendingTasks.has(saveId);
 }
 
+export function hasAnyPendingTask(): boolean {
+  return pendingTasks.size > 0;
+}
+
 export function abortPendingTask(saveId: string): void {
   const task = pendingTasks.get(saveId);
   if (task) {
@@ -108,7 +112,6 @@ export function startBackgroundAIRequest(params: {
     updatedAt: now,
   };
 
-  storeMemoryMessage(userMessage);
   storeMemoryMessage(aiMessage);
 
   const controller = new AbortController();
