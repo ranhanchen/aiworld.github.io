@@ -12,7 +12,7 @@ interface PendingTask {
   userMessageId: string;
   roundIndex: number;
   controller: AbortController;
-  promise: Promise<void>;
+  promise: Promise<{ rawText: string; segments: MessageSegment[] } | undefined>;
 }
 
 const pendingTasks = new Map<string, PendingTask>();
@@ -80,7 +80,7 @@ export function startBackgroundAIRequest(params: {
   modelName: string;
   temperature: number;
   topP: number;
-}): { userMessage: Message; aiMessage: Message; completion: Promise<void> } {
+}): { userMessage: Message; aiMessage: Message; completion: Promise<{ rawText: string; segments: MessageSegment[] } | undefined> } {
   const { saveId, roundIndex, userRawText, chatMessages, apiEndpoint, apiKey, modelName, temperature, topP } = params;
 
   abortPendingTask(saveId);
@@ -216,6 +216,7 @@ export function startBackgroundAIRequest(params: {
     }
 
     pendingTasks.delete(saveId);
+    return { rawText: fullText, segments: isValid ? segments : [] };
   })();
 
   pendingTasks.set(saveId, {

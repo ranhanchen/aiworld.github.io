@@ -218,33 +218,24 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       const latestSave = saveRef.current;
       const chatMessages = buildChatContext(messages, { role: 'user', rawText: text } as Message, latestSave);
 
-      const { aiMessage, completion } = startBackgroundAIRequest({
+      const { userMessage, aiMessage, completion } = startBackgroundAIRequest({
         saveId: latestSave.id, roundIndex, userRawText: text, chatMessages, apiEndpoint, apiKey, modelName, temperature, topP,
       });
 
-      setMessages((prev) => [...prev, aiMessage]);
+      setMessages((prev) => [...prev, userMessage, aiMessage]);
       setCurrentRound(roundIndex);
       setLoadingState('sending');
       streamingMessageIdRef.current = aiMessage.id;
 
-      completion.then(async () => {
-        try {
-          const allMsgs = await getMessagesBySaveId(latestSave.id);
-          const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-          const merged = [...allMsgs];
-          for (const mm of memoryMsgs) {
-            const existingIdx = merged.findIndex((m) => m.id === mm.id);
-            if (existingIdx >= 0) {
-              merged[existingIdx] = mm;
-            } else {
-              merged.push(mm);
-            }
-          }
-          merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
-          setMessages(merged);
-        } catch {
-          const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-          if (memoryMsgs.length > 0) setMessages(memoryMsgs);
+      completion.then((result) => {
+        if (result) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id
+                ? { ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() }
+                : m,
+            ),
+          );
         }
         setCurrentRound(roundIndex);
         setLoadingState('idle');
@@ -501,24 +492,15 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       setLoadingState('sending');
       streamingMessageIdRef.current = aiMessage.id;
 
-      completion.then(async () => {
-        try {
-          const allMsgs = await getMessagesBySaveId(latestSave.id);
-          const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-          const merged = [...allMsgs];
-          for (const mm of memoryMsgs) {
-            const existingIdx = merged.findIndex((m) => m.id === mm.id);
-            if (existingIdx >= 0) {
-              merged[existingIdx] = mm;
-            } else {
-              merged.push(mm);
-            }
-          }
-          merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
-          setMessages(merged);
-        } catch {
-          const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-          if (memoryMsgs.length > 0) setMessages(memoryMsgs);
+      completion.then((result) => {
+        if (result) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id
+                ? { ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() }
+                : m,
+            ),
+          );
         }
         setCurrentRound(roundIndex);
         setLoadingState('idle');
@@ -561,30 +543,24 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     const { apiEndpoint, apiKey, modelName, temperature, topP } = getNetworkConfig();
     if (!apiKey || !apiEndpoint) { setLoadingState('error'); return; }
 
-    const { userMessage, aiMessage, completion } = startBackgroundAIRequest({
+    const { aiMessage, completion } = startBackgroundAIRequest({
       saveId: latestSave.id, roundIndex, userRawText: text, chatMessages, apiEndpoint, apiKey, modelName, temperature, topP,
     });
 
-    setMessages((prev) => [...prev, userMessage, aiMessage]);
+    setMessages((prev) => [...prev, aiMessage]);
     setCurrentRound(roundIndex);
     setLoadingState('sending');
 
-    completion.then(async () => {
-      try {
-        const allMsgs = await getMessagesBySaveId(latestSave.id);
-        const memoryMsgs = getMemoryMessagesForSave(latestSave.id);
-        const merged = [...allMsgs];
-        for (const mm of memoryMsgs) {
-          const existingIdx = merged.findIndex((m) => m.id === mm.id);
-          if (existingIdx >= 0) {
-            merged[existingIdx] = mm;
-          } else {
-            merged.push(mm);
-          }
-        }
-        merged.sort((a, b) => a.roundIndex - b.roundIndex || a.createdAt - b.createdAt);
-        setMessages(merged);
-      } catch { setMessages(messages); }
+    completion.then((result) => {
+      if (result) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiMessage.id
+              ? { ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() }
+              : m,
+          ),
+        );
+      }
       setCurrentRound(roundIndex);
       setLoadingState('idle');
     }).catch(() => setLoadingState('error'));
