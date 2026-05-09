@@ -50,7 +50,7 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey && !disabled) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !disabled) {
         e.preventDefault();
         handleSend();
       }
@@ -97,9 +97,9 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
             value={text}
             onChange={(e) => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入你的行动、对话或描述..."
+            placeholder="输入你的行动、对话或描述... (Ctrl+Enter 发送)"
             className="w-full px-4 py-[11px] rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-accent transition-shadow min-h-[44px] max-h-[300px] leading-[22px]"
-            rows={1}
+            rows={3}
           />
         </div>
         <button
