@@ -10,7 +10,9 @@ interface MessageEditorProps {
 export default function MessageEditor({ message, onSave, onCancel }: MessageEditorProps) {
   const [editText, setEditText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(300);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const isAiMessage = message.role === 'ai';
   const hasSegments = message.segments && message.segments.length > 0;
@@ -48,6 +50,28 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
     }
   };
 
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = editorHeight;
+    resizeRef.current = { startY, startH };
+
+    const onMove = (e: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const newH = Math.max(200, resizeRef.current.startH + (e.clientY - resizeRef.current.startY));
+      setEditorHeight(newH);
+    };
+
+    const onUp = () => {
+      resizeRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       onCancel();
@@ -60,9 +84,9 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
   const lineCount = editText.split('\n').length;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
       <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-2xl max-h-[80vh] flex flex-col animate-slide-up"
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
@@ -89,14 +113,30 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
             <label className="block text-sm font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
               {isAiMessage ? '回复内容（将同步更新所有对话片段）' : '消息内容'}
             </label>
-            <textarea
-              ref={textareaRef}
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="w-full h-64 px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
-              placeholder="输入消息内容..."
-            />
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
+                style={{ height: editorHeight, minHeight: '200px' }}
+                placeholder="输入消息内容..."
+              />
+              {/* 自定义拖拽手柄 - 宽度1/3 */}
+              <div
+                className="absolute bottom-0 left-1/3 right-1/3 h-6 cursor-ns-resize flex items-center justify-center
+                           bg-gray-200/50 dark:bg-gray-700/50 hover:bg-gray-300/50 dark:hover:bg-gray-600/50
+                           rounded-b-xl select-none"
+                onMouseDown={handleResizeStart}
+              >
+                <div className="flex gap-1">
+                  <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
+                  <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
+                  <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
+                </div>
+              </div>
+            </div>
             <div className="flex justify-between items-center mt-2 text-xs text-text-secondary dark:text-text-secondary-dark">
               <span>{characterCount} 字符 · {lineCount} 行</span>
               {isAiMessage && (

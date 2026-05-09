@@ -707,7 +707,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               <textarea
                 value={config.aiRestriction.aiBasePrompt}
                 onChange={(e) => updateAiRestriction('aiBasePrompt', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
                 placeholder="告诉AI如何理解玩家输入，以及如何回复的底层规则..."
                 rows={6}
               />
@@ -825,7 +825,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
                       updated[idx] = e.target.value;
                       updateWinCondition('subGoals', updated);
                     }}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
                     placeholder="如：结识一位盟友"
                     rows={2}
                   />
@@ -859,7 +859,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
                       updated[idx] = e.target.value;
                       updateWinCondition('failureConditions', updated);
                     }}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
                     placeholder="如：主角生命归零"
                     rows={2}
                   />

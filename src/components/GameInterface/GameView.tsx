@@ -566,26 +566,49 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     }).catch(() => setLoadingState('error'));
   }, [messages, save, getNetworkConfig]);
 
-  function stripFormatting(text: string): string {
-    return text
-      .replace(/^\[场景\]\s*/, '')
-      .replace(/^\[系统\]\s*/, '')
-      .replace(/^【[^】]*】/, '')
-      .replace(/^\*/, '')
-      .replace(/\*$/, '');
-  }
-
   function parseEditedTextToSegments(editedText: string, originalSegments: MessageSegment[]): MessageSegment[] {
     if (!editedText.trim()) return originalSegments;
     const lines = editedText.split('\n').filter(l => l.trim());
-    if (lines.length <= 1) {
-      const cleaned = stripFormatting(editedText);
-      if (originalSegments.length === 1) return [{ ...originalSegments[0], content: cleaned }];
-      return [{ type: 'scene' as const, content: cleaned }];
+    if (lines.length === 0) return originalSegments;
+
+    const newSegments: MessageSegment[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i];
+      let segment: MessageSegment | null = null;
+
+      // 尝试从格式标记检测段类型
+      if (/^\[场景\]/.test(trimmed)) {
+        segment = { type: 'scene', content: trimmed.replace(/^\[场景\]\s*/, '') };
+      } else if (/^\[系统\]/.test(trimmed)) {
+        segment = { type: 'system', content: trimmed.replace(/^\[系统\]\s*/, '') };
+      } else if (/^【[^】]+】/.test(trimmed)) {
+        const match = trimmed.match(/^【([^】]+)】\s*(.*)/);
+        segment = {
+          type: 'dialogue',
+          speaker: match?.[1] || '未知',
+          content: match?.[2] || '',
+        };
+      } else if (/^\*.*\*$/.test(trimmed)) {
+        segment = { type: 'action', content: trimmed.replace(/^\*/, '').replace(/\*$/, '') };
+      } else {
+        // 无标记：继承同位置原类型，超出部分默认为 scene
+        if (i < originalSegments.length) {
+          segment = { ...originalSegments[i], content: trimmed };
+        } else {
+          segment = { type: 'scene', content: trimmed };
+        }
+      }
+
+      if (segment) {
+        if (segment.type === 'dialogue' && !segment.speaker) {
+          segment.speaker = '未知';
+        }
+        newSegments.push(segment);
+      }
     }
-    return originalSegments.map((seg, i) =>
-      i < lines.length ? { ...seg, content: stripFormatting(lines[i]) } : seg
-    );
+
+    return newSegments;
   }
 
   const handleEditSave = useCallback(async (editedText: string) => {

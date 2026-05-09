@@ -110,7 +110,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
       }
 
       return (
-        <div className="flex gap-2 max-w-[70%]">
+        <div className="flex gap-2 max-w-[90%]">
           <span className="shrink-0 text-xs font-medium text-primary dark:text-primary-dark mt-1">
             {speaker}
           </span>

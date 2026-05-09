@@ -49,6 +49,38 @@ function tryParseSingleItem(item: unknown): MessageSegment | null {
   return segment;
 }
 
+function findJsonAnywhere(text: string): string | null {
+  const arrayStart = text.indexOf('[');
+  const objectStart = text.indexOf('{');
+  let start = -1;
+  let isArray = false;
+
+  if (arrayStart >= 0 && (objectStart < 0 || arrayStart < objectStart)) {
+    start = arrayStart;
+    isArray = true;
+  } else if (objectStart >= 0) {
+    start = objectStart;
+  }
+
+  if (start < 0) return null;
+
+  const close = isArray ? ']' : '}';
+  let searchEnd = text.length;
+
+  while (searchEnd > start) {
+    const idx = text.lastIndexOf(close, searchEnd);
+    if (idx < start) break;
+    try {
+      JSON.parse(text.slice(start, idx + 1));
+      return text.slice(start, idx + 1);
+    } catch {
+      searchEnd = idx - 1;
+    }
+  }
+
+  return null;
+}
+
 function extractJsonFromMarkdown(input: string): string {
   const trimmed = input.trim();
 
@@ -99,15 +131,9 @@ function extractJsonFromMarkdown(input: string): string {
     // ignore
   }
 
-  const jsonLike = trimmed.match(/(\[[\s\S]*\]|\{[\s\S]*\})$/);
-  if (jsonLike) {
-    try {
-      JSON.parse(jsonLike[1]);
-      return jsonLike[1];
-    } catch {
-      // ignore
-    }
-  }
+  // 在文本任意位置查找 JSON
+  const anywhere = findJsonAnywhere(trimmed);
+  if (anywhere) return anywhere;
 
   return trimmed;
 }

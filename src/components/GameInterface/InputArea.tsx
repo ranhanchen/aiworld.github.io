@@ -20,7 +20,7 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
     const ta = textareaRef.current;
     if (ta) {
       ta.style.height = 'auto';
-      const maxH = 160;
+      const maxH = 300;
       ta.style.height = Math.min(ta.scrollHeight, maxH) + 'px';
     }
   }, []);
@@ -98,7 +98,7 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
             onChange={(e) => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="输入你的行动、对话或描述..."
-            className="w-full px-4 py-[11px] rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent transition-shadow min-h-[44px] max-h-[160px] leading-[22px]"
+            className="w-full px-4 py-[11px] rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-accent transition-shadow min-h-[44px] max-h-[300px] leading-[22px]"
             rows={1}
           />
         </div>
