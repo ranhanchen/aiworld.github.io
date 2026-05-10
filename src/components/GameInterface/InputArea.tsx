@@ -18,6 +18,7 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dragBaseRef = useRef<number | null>(null);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   const adjustHeight = useCallback(() => {
     const ta = textareaRef.current;
@@ -134,18 +135,20 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
             style={{ height: inputHeight, minHeight: '44px', maxHeight: '300px' }}
             rows={3}
           />
-          <div
-            className="absolute bottom-0 right-0 w-1/3 h-6 cursor-ns-resize flex items-center justify-center
-                       bg-gray-200/50 dark:bg-gray-700/50 hover:bg-gray-300/50 dark:hover:bg-gray-600/50
-                       rounded-b-xl select-none"
-            onMouseDown={handleResizeStart}
-          >
-            <div className="flex gap-1">
-              <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
-              <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
-              <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
+          {!isTouchDevice && (
+            <div
+              className="absolute bottom-0 right-0 w-1/3 h-6 cursor-ns-resize flex items-center justify-center
+                         bg-gray-200/50 dark:bg-gray-700/50 hover:bg-gray-300/50 dark:hover:bg-gray-600/50
+                         rounded-b-xl select-none"
+              onMouseDown={handleResizeStart}
+            >
+              <div className="flex gap-1">
+                <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
+                <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
+                <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <button
           onClick={handleSend}

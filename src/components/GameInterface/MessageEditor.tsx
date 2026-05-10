@@ -16,6 +16,7 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
 
   const isAiMessage = message.role === 'ai';
   const hasSegments = message.segments && message.segments.length > 0;
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -80,21 +81,6 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
     }
   };
 
-  const characterCount = editText.length;
-  const lineCount = editText.split('\n').length;
-
-  // 直接从原始 segments 映射预览项，不做重新解析
-  const previewItems: Array<{ label: string; content: string }> = (message.segments && message.segments.length > 0)
-    ? message.segments.map(seg => ({
-        label: seg.type === 'dialogue' ? (seg.speaker || '对话')
-             : seg.type === 'scene' ? '场景'
-             : seg.type === 'action' ? '动作'
-             : seg.type === 'system' ? '系统'
-             : seg.type,
-        content: seg.content,
-      }))
-    : [];
-
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
       <div
@@ -121,21 +107,17 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
         </div>
 
         <div className="flex-1 overflow-auto p-6">
-          <div className="mb-4">
-            <label className="block text-lg font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
-              {isAiMessage ? '回复内容（将同步更新所有对话片段）' : '消息内容'}
-            </label>
-            <div className="relative">
-              <textarea
-                ref={textareaRef}
-                value={editText}
-                onChange={(e) => setEditText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark text-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
-                style={{ height: editorHeight, minHeight: '200px' }}
-                placeholder="输入消息内容..."
-              />
-              {/* 自定义拖拽手柄 - 右侧1/3宽度 */}
+          <div className="relative h-full">
+            <textarea
+              ref={textareaRef}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark text-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
+              style={{ height: editorHeight, minHeight: '200px' }}
+              placeholder="输入消息内容..."
+            />
+            {!isTouchDevice && (
               <div
                 className="absolute bottom-0 right-0 w-1/3 h-6 cursor-ns-resize flex items-center justify-center
                            bg-gray-200/50 dark:bg-gray-700/50 hover:bg-gray-300/50 dark:hover:bg-gray-600/50
@@ -148,76 +130,8 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
                   <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
                 </div>
               </div>
-            </div>
-            <div className="flex justify-between items-center mt-2 text-base text-text-secondary dark:text-text-secondary-dark">
-              <span>{characterCount} 字符 · {lineCount} 行</span>
-              {isAiMessage && (
-                <span className="text-amber-600 dark:text-amber-400">
-                  编辑将影响所有对话片段的显示
-                </span>
-              )}
-            </div>
+            )}
           </div>
-
-          {isAiMessage && (
-            <div className="mb-4">
-              <label className="block text-lg font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
-                当前对话片段预览
-              </label>
-              <div className="space-y-2 max-h-40 overflow-auto bg-gray-50 dark:bg-gray-900 rounded-xl p-3">
-                {previewItems.length > 0 ? previewItems.map((item, idx) => (
-                  <div key={idx} className="text-base bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-100 dark:border-gray-700">
-                    <span className="font-bold text-accent dark:text-accent-dark uppercase">
-                      {item.label}:
-                    </span>
-                    <span className="ml-2 text-text-primary dark:text-text-primary-dark">
-                      {item.content.length > 50 ? item.content.substring(0, 50) + '...' : item.content}
-                    </span>
-                  </div>
-                )) : (
-                  <p className="text-xs text-text-secondary dark:text-text-secondary-dark text-center py-2">
-                    暂无内容
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {isAiMessage && !hasSegments && (
-            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-amber-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <p className="text-lg font-medium text-amber-800 dark:text-amber-200">
-                    AI 回复尚未完成解析
-                  </p>
-                  <p className="text-base text-amber-600 dark:text-amber-300 mt-1">
-                    此消息的对话片段尚未生成。编辑后的内容将在重新打开游戏时显示。
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!isAiMessage && (
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl">
-              <div className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-blue-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <p className="text-lg font-medium text-blue-800 dark:text-blue-200">
-                    用户消息编辑说明
-                  </p>
-                  <p className="text-base text-blue-600 dark:text-blue-300 mt-1">
-                    编辑用户消息将触发重新生成AI回复。系统将使用编辑后的内容作为新的用户输入。
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-3">
