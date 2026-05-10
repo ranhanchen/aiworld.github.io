@@ -86,7 +86,7 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
       <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-up"
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-[96vw] max-h-[96vh] flex flex-col animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
@@ -94,7 +94,7 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-primary-dark">
               编辑消息
             </h3>
-            <p className="text-xs text-text-secondary dark:text-text-secondary-dark mt-0.5">
+            <p className="text-base text-text-secondary dark:text-text-secondary-dark mt-0.5">
               {isAiMessage ? 'AI消息' : '用户消息'} · 第{message.roundIndex}回合 · 按 Ctrl+Enter 保存
             </p>
           </div>
@@ -110,7 +110,7 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
 
         <div className="flex-1 overflow-auto p-6">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
+            <label className="block text-lg font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
               {isAiMessage ? '回复内容（将同步更新所有对话片段）' : '消息内容'}
             </label>
             <div className="relative">
@@ -119,7 +119,7 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark text-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
                 style={{ height: editorHeight, minHeight: '200px' }}
                 placeholder="输入消息内容..."
               />
@@ -137,7 +137,7 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
                 </div>
               </div>
             </div>
-            <div className="flex justify-between items-center mt-2 text-xs text-text-secondary dark:text-text-secondary-dark">
+            <div className="flex justify-between items-center mt-2 text-base text-text-secondary dark:text-text-secondary-dark">
               <span>{characterCount} 字符 · {lineCount} 行</span>
               {isAiMessage && (
                 <span className="text-amber-600 dark:text-amber-400">
@@ -149,12 +149,12 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
 
           {isAiMessage && hasSegments && (
             <div className="mb-4">
-              <label className="block text-sm font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
+              <label className="block text-lg font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
                 当前对话片段预览
               </label>
               <div className="space-y-2 max-h-40 overflow-auto bg-gray-50 dark:bg-gray-900 rounded-xl p-3">
                 {message.segments!.map((seg, idx) => (
-                  <div key={idx} className="text-xs bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-100 dark:border-gray-700">
+                  <div key={idx} className="text-base bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-100 dark:border-gray-700">
                     <span className="font-bold text-accent dark:text-accent-dark uppercase">
                       {seg.type === 'dialogue' ? seg.speaker || '对话' :
                        seg.type === 'scene' ? '场景' :
@@ -177,10 +177,10 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  <p className="text-lg font-medium text-amber-800 dark:text-amber-200">
                     AI 回复尚未完成解析
                   </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+                  <p className="text-base text-amber-600 dark:text-amber-300 mt-1">
                     此消息的对话片段尚未生成。编辑后的内容将在重新打开游戏时显示。
                   </p>
                 </div>
@@ -195,10 +195,10 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>
-                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  <p className="text-lg font-medium text-blue-800 dark:text-blue-200">
                     用户消息编辑说明
                   </p>
-                  <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                  <p className="text-base text-blue-600 dark:text-blue-300 mt-1">
                     编辑用户消息将触发重新生成AI回复。系统将使用编辑后的内容作为新的用户输入。
                   </p>
                 </div>
@@ -211,14 +211,14 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
           <button
             onClick={onCancel}
             disabled={isSaving}
-            className="px-4 py-2 text-sm font-medium text-text-secondary dark:text-text-secondary-dark hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-lg font-medium text-text-secondary dark:text-text-secondary-dark hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
           >
             取消
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving || !editText.trim()}
-            className="px-6 py-2 text-sm font-medium text-white bg-accent hover:bg-accent/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-6 py-2 text-lg font-medium text-white bg-accent hover:bg-accent/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isSaving ? (
               <>
