@@ -655,14 +655,14 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       <header className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
         <button
           onClick={() => { flushMemoryMessagesToDB(save.id).catch(() => {}); onBackToMenu(); }}
-          className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark min-h-[44px] min-w-[44px]"
+          className="flex items-center gap-1 text-lg text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark min-h-[44px] min-w-[44px]"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           <span className="hidden tablet:inline">返回</span>
         </button>
         <div className="text-center">
-          <h1 className="text-sm font-semibold">{save.metadata.title || '未命名'}</h1>
-          <p className="text-xs text-text-secondary dark:text-text-secondary-dark">第 {currentRound} 回合</p>
+          <h1 className="text-lg font-semibold">{save.metadata.title || '未命名'}</h1>
+          <p className="text-base text-text-secondary dark:text-text-secondary-dark">第 {currentRound} 回合</p>
         </div>
         <button
           onClick={onOpenMemory}
@@ -676,8 +676,8 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       {loadingState === 'error' && (
         <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-4 py-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-red-600 dark:text-red-400">AI响应出错，请检查API配置或重试</span>
-            <button onClick={() => setLoadingState('idle')} className="text-xs text-red-500 underline">关闭</button>
+            <span className="text-lg text-red-600 dark:text-red-400">AI响应出错，请检查API配置或重试</span>
+            <button onClick={() => setLoadingState('idle')} className="text-base text-red-500 underline">关闭</button>
           </div>
         </div>
       )}
@@ -689,7 +689,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
             <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
-          <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">AI 正在生成回复...</span>
+          <span className="text-base text-indigo-600 dark:text-indigo-400 font-medium">AI 正在生成回复...</span>
         </div>
       )}
 

@@ -116,20 +116,20 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
 
         <div className="flex-1 overflow-y-auto p-4">
           <div className="mb-6">
-            <h3 className="text-sm font-semibold mb-2">当前摘要 (可手动编辑)</h3>
-            <p className="text-xs text-text-secondary dark:text-text-secondary-dark mb-2">
+            <h3 className="text-lg font-semibold mb-2">当前摘要 (可手动编辑)</h3>
+            <p className="text-base text-text-secondary dark:text-text-secondary-dark mb-2">
               你可以直接修改摘要内容来干预AI的记忆走向
             </p>
             <textarea
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               rows={10}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-vertical font-mono"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-lg focus:outline-none focus:ring-2 focus:ring-accent resize-vertical font-mono"
               placeholder="摘要为空时，AI将仅依赖最近的对话上下文..."
             />
             {message && (
               <p
-                className={`mt-2 text-xs ${
+                className={`mt-2 text-base ${
                   message.type === 'success'
                     ? 'text-green-600 dark:text-green-400'
                     : 'text-red-500'

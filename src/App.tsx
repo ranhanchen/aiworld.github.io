@@ -398,7 +398,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleOpenChat}
-                className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity"
+                className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity"
               >
                 AI 对话
               </button>
@@ -430,10 +430,10 @@ export default function App() {
 
       {screen === 'config' && (
         <div className="min-h-[100dvh] bg-surface dark:bg-surface-dark">
-          <div className="max-w-3xl mx-auto px-4 py-6">
+          <div className="max-w-4xl mx-auto px-4 py-6">
             <button
               onClick={handleCancelConfig}
-              className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark mb-4 min-h-[44px] min-w-[44px]"
+              className="flex items-center gap-1 text-lg text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark mb-4 min-h-[44px] min-w-[44px]"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -484,10 +484,10 @@ export default function App() {
 
       {screen === 'chatConfig' && (
         <div className="min-h-[100dvh] bg-surface dark:bg-surface-dark">
-          <div className="max-w-3xl mx-auto px-4 py-6">
+          <div className="max-w-4xl mx-auto px-4 py-6">
             <button
               onClick={handleCancelChatConfig}
-              className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark mb-4 min-h-[44px] min-w-[44px]"
+              className="flex items-center gap-1 text-lg text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark mb-4 min-h-[44px] min-w-[44px]"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

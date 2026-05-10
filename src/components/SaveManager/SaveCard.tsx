@@ -33,15 +33,15 @@ export default function SaveCard({ save, onClick, onEdit, onDelete, onDownload }
       />
       <div className="p-3">
         <h3
-          className="font-semibold text-sm truncate text-text-primary dark:text-text-primary-dark"
+          className="font-semibold text-lg truncate text-text-primary dark:text-text-primary-dark"
           title={title}
         >
           {title}
         </h3>
-        <p className="text-xs text-text-secondary dark:text-text-secondary-dark mt-1">
+        <p className="text-base text-text-secondary dark:text-text-secondary-dark mt-1">
           第 {save.metadata.roundCount} 回合
         </p>
-        <p className="text-xs text-text-secondary dark:text-text-secondary-dark mt-0.5">
+        <p className="text-base text-text-secondary dark:text-text-secondary-dark mt-0.5">
           {formatTimestamp(save.metadata.lastPlayedAt)}
         </p>
       </div>

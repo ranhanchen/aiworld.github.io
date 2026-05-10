@@ -328,7 +328,7 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
       <header className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
         <button
           onClick={onBack}
-          className="flex items-center gap-1 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark min-h-[44px] min-w-[44px]"
+          className="flex items-center gap-1 text-lg text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark min-h-[44px] min-w-[44px]"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -337,7 +337,7 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
         </button>
 
         <div className="text-center">
-          <h1 className="text-sm font-semibold">AI 对话</h1>
+          <h1 className="text-lg font-semibold">AI 对话</h1>
         </div>
 
         <div className="flex items-center gap-1">
@@ -368,12 +368,12 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
       {loadingState === 'error' && (
         <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-4 py-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-red-600 dark:text-red-400">
+            <span className="text-lg text-red-600 dark:text-red-400">
               AI响应出错，请检查API配置或重试
             </span>
             <button
               onClick={() => setLoadingState('idle')}
-              className="text-xs text-red-500 underline"
+              className="text-base text-red-500 underline"
             >
               关闭
             </button>

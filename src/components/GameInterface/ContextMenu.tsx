@@ -59,7 +59,7 @@ export default function ContextMenu({ message, onAction, onClose }: ContextMenuP
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
-          <p className="text-xs text-text-secondary dark:text-text-secondary-dark truncate">
+          <p className="text-base text-text-secondary dark:text-text-secondary-dark truncate">
             {message.role === 'user' ? '用户消息' : 'AI消息'} · 第{message.roundIndex}回合
           </p>
         </div>
@@ -76,7 +76,7 @@ export default function ContextMenu({ message, onAction, onClose }: ContextMenuP
                     onAction(item.id);
                   }
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[44px] ${
+                className={`w-full flex items-center gap-3 px-4 py-3 text-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[44px] ${
                   item.danger
                     ? 'text-red-500 hover:text-red-600'
                     : 'text-text-primary dark:text-text-primary-dark'

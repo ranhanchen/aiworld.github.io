@@ -59,19 +59,19 @@ export default function ImportExport({ onComplete }: ImportExportProps) {
         />
         <label
           htmlFor="import-file"
-          className={`px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs cursor-pointer hover:opacity-90 transition-opacity ${
+          className={`px-3 py-1.5 bg-blue-600 text-white rounded-lg text-base cursor-pointer hover:opacity-90 transition-opacity ${
             importing ? 'opacity-50 pointer-events-none' : ''
           }`}
         >
           {importing ? '导入中...' : '选择文件导入'}
         </label>
-        <span className="text-xs text-text-secondary dark:text-text-secondary-dark">
+        <span className="text-base text-text-secondary dark:text-text-secondary-dark">
           支持JSON格式的存档备份文件
         </span>
       </div>
       {message && (
         <p
-          className={`mt-2 text-xs ${
+          className={`mt-2 text-base ${
             message.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-500'
           }`}
         >

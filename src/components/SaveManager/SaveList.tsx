@@ -73,7 +73,7 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-text-secondary dark:text-text-secondary-dark">
+          <span className="text-lg text-text-secondary dark:text-text-secondary-dark">
             正在加载存档...
           </span>
         </div>
@@ -84,10 +84,10 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
   if (viewState === 'error') {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <div className="text-red-500 text-sm">{errorMessage}</div>
+        <div className="text-red-500 text-lg">{errorMessage}</div>
         <button
           onClick={loadSaves}
-          className="px-4 py-2 bg-accent text-white rounded-lg text-sm hover:opacity-90 transition-opacity"
+          className="px-4 py-2 bg-accent text-white rounded-lg text-lg hover:opacity-90 transition-opacity"
         >
           重试
         </button>
@@ -101,19 +101,19 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
         <svg className="w-12 h-12 text-gray-400 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
         </svg>
-        <p className="text-text-secondary dark:text-text-secondary-dark text-sm">
+        <p className="text-text-secondary dark:text-text-secondary-dark text-lg">
           暂无存档，开始你的冒险吧
         </p>
         <div className="flex gap-2">
           <button
             onClick={onCreateNew}
-            className="px-4 py-2 bg-accent text-white rounded-lg text-sm hover:opacity-90 transition-opacity"
+            className="px-4 py-2 bg-accent text-white rounded-lg text-lg hover:opacity-90 transition-opacity"
           >
             新建存档
           </button>
           <button
             onClick={() => setShowImportExport(!showImportExport)}
-            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-text-primary-dark rounded-lg text-sm hover:opacity-90 transition-opacity"
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-text-primary-dark rounded-lg text-lg hover:opacity-90 transition-opacity"
           >
             导入存档
           </button>
@@ -130,13 +130,13 @@ export default function SaveList({ onPlaySave, onEditSave, onCreateNew }: SaveLi
         <div className="flex gap-2">
           <button
             onClick={() => setShowImportExport(!showImportExport)}
-            className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-text-primary-dark rounded-lg text-xs hover:opacity-90 transition-opacity"
+            className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-text-primary-dark rounded-lg text-base hover:opacity-90 transition-opacity"
           >
             导入
           </button>
           <button
             onClick={onCreateNew}
-            className="px-3 py-1.5 bg-accent text-white rounded-lg text-xs hover:opacity-90 transition-opacity"
+            className="px-3 py-1.5 bg-accent text-white rounded-lg text-base hover:opacity-90 transition-opacity"
           >
             新建存档
           </button>

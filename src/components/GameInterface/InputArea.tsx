@@ -68,7 +68,7 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
             <button
               key={api.id}
               onClick={() => onSelectApi(api.id)}
-              className={`px-2 py-1 rounded-md text-xs font-medium transition-colors min-h-[32px] ${
+              className={`px-2 py-1 rounded-md text-base font-medium transition-colors min-h-[32px] ${
                 api.id === selectedApiId
                   ? 'bg-accent text-white'
                   : 'bg-gray-100 dark:bg-gray-700 text-text-secondary dark:text-text-secondary-dark hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -84,7 +84,7 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
         <button
           onClick={onContinue}
           disabled={disabled}
-          className="shrink-0 h-[44px] px-3 mt-0 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1"
+          className="shrink-0 h-[44px] px-3 mt-0 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
@@ -98,14 +98,14 @@ export default function InputArea({ onSend, onContinue, disabled, apis, selected
             onChange={(e) => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="输入你的行动、对话或描述... (Ctrl+Enter 发送)"
-            className="w-full px-4 py-[11px] rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-accent transition-shadow min-h-[44px] max-h-[300px] leading-[22px]"
+            className="w-full px-4 py-[11px] rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-base resize-y focus:outline-none focus:ring-2 focus:ring-accent transition-shadow min-h-[44px] max-h-[300px] leading-[26px]"
             rows={3}
           />
         </div>
         <button
           onClick={handleSend}
           disabled={disabled || !text.trim()}
-          className="shrink-0 h-[44px] w-[44px] mt-0 bg-accent text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center"
+          className="shrink-0 h-[44px] w-[44px] mt-0 bg-accent text-white rounded-xl text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center"
           title="发送"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

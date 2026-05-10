@@ -431,7 +431,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
   }, [updateNetwork]);
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-[90%] mx-auto">
       <TabPanel activeTab={activeTab} onTabChange={setActiveTab} chatMode={chatMode}>
         {activeTab === 'network' && (
           <div className="space-y-4">
@@ -559,7 +559,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
             <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
               <button
                 onClick={addApiConfig}
-                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity min-h-[44px]"
               >
                 添加API
               </button>
@@ -570,7 +570,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
                       removeApiConfig(activeApi.id);
                     }
                   }}
-                  className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity min-h-[44px]"
                 >
                   删除当前API
                 </button>
@@ -578,7 +578,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               <button
                 onClick={handleTestConnection}
                 disabled={testingConnection}
-                className={`px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px] ${
+                className={`px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity min-h-[44px] ${
                   testingConnection ? 'opacity-50' : ''
                 }`}
               >
@@ -641,7 +641,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
                 onChange={(e) => updateSystem('autoScroll', e.target.checked)}
                 className="w-4 h-4 rounded accent-accent"
               />
-              <span className="text-sm">自动滚动</span>
+              <span className="text-lg">自动滚动</span>
             </label>
           </div>
         )}
@@ -815,7 +815,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
             />
 
             <div>
-              <label className="block text-sm font-medium mb-1.5">次要目标</label>
+              <label className="block text-lg font-medium mb-1.5">次要目标</label>
               {config.winCondition.subGoals.map((goal, idx) => (
                 <div key={`subgoal-${idx}`} className="flex gap-2 mb-1.5">
                   <textarea
@@ -849,7 +849,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5">失败条件</label>
+              <label className="block text-lg font-medium mb-1.5">失败条件</label>
               {config.winCondition.failureConditions.map((cond, idx) => (
                 <div key={`failcond-${idx}`} className="flex gap-2 mb-1.5">
                   <textarea
@@ -903,7 +903,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
       <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
         {localMessage && (
           <div className="flex-1 flex items-center justify-start">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm font-medium rounded-lg border border-green-200 dark:border-green-800 animate-fade-in">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-base font-medium rounded-lg border border-green-200 dark:border-green-800 animate-fade-in">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
@@ -913,13 +913,13 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
         )}
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-sm text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark transition-colors min-h-[44px]"
+          className="px-4 py-2 text-lg text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark transition-colors min-h-[44px]"
         >
           取消
         </button>
         <button
           onClick={() => onSave(config)}
-          className="px-6 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity min-h-[44px]"
+          className="px-6 py-2 bg-accent text-white text-lg font-medium rounded-lg hover:opacity-90 transition-opacity min-h-[44px]"
         >
           保存设定
         </button>
@@ -931,7 +931,7 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium mb-1.5">{label}</label>
+      <label className="block text-lg font-medium mb-1.5">{label}</label>
       {children}
     </div>
   );
@@ -957,7 +957,7 @@ function FieldWithGenerate({
   multiline,
 }: FieldWithGenerateProps) {
   const inputClass =
-    'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent';
+    'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-base focus:outline-none focus:ring-2 focus:ring-accent';
 
   return (
     <FieldRow label={label}>

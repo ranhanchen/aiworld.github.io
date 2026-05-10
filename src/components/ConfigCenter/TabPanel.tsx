@@ -28,7 +28,7 @@ export default function TabPanel({ activeTab, onTabChange, children, chatMode }:
           <button
             key={tab}
             onClick={() => onTabChange(tab)}
-            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap min-h-[44px] transition-colors relative ${
+            className={`px-4 py-2.5 text-lg font-medium whitespace-nowrap min-h-[44px] transition-colors relative ${
               activeTab === tab
                 ? 'text-accent border-b-2 border-accent'
                 : 'text-text-secondary dark:text-text-secondary-dark hover:text-text-primary dark:hover:text-text-primary-dark'
