@@ -182,13 +182,16 @@ export function startBackgroundAIRequest(params: {
       fullText,
     );
 
+    // 去除 ```json ``` 包裹，使 rawText 干净
+    const cleanRawText = fullText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+
     const targetId = dbAiMessageId || aiMessage.id;
     const completedMessage: Message = {
       id: targetId,
       saveId,
       roundIndex,
       role: 'ai',
-      rawText: fullText,
+      rawText: cleanRawText,
       segments: isValid ? segments : [],
       status: 'completed',
       createdAt: now,
@@ -197,7 +200,7 @@ export function startBackgroundAIRequest(params: {
 
     try {
       await updateMessage(targetId, {
-        rawText: fullText,
+        rawText: cleanRawText,
         segments: isValid ? segments : [],
         status: 'completed',
       });

@@ -38,6 +38,25 @@ function tryParseSingleItem(item: unknown): MessageSegment | null {
   return segment;
 }
 
+/** 去除 JSON 中数组/对象末尾多余的逗号、转义字符串中的原始控制字符，兼容大模型常见输出问题 */
+function sanitizeJson(text: string): string {
+  let result = text.replace(/,(\s*[\]}])/g, '$1');
+  // 转义字符串内部的原始控制字符（如 \n \r \t），避免 JSON.parse 报 Bad control character
+  let out = '';
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < result.length; i++) {
+    const ch = result[i];
+    if (esc) { esc = false; out += ch; continue; }
+    if (ch === '\\' && inStr) { esc = true; out += ch; continue; }
+    if (ch === '"') { inStr = !inStr; out += ch; continue; }
+    if (inStr && (ch === '\n' || ch === '\r')) { out += '\\n'; continue; }
+    if (inStr && ch === '\t') { out += '\\t'; continue; }
+    out += ch;
+  }
+  return out;
+}
+
 function findJsonAnywhere(text: string): string | null {
   const arrayStart = text.indexOf('[');
   const objectStart = text.indexOf('{');
@@ -59,9 +78,10 @@ function findJsonAnywhere(text: string): string | null {
   while (searchEnd > start) {
     const idx = text.lastIndexOf(close, searchEnd);
     if (idx < start) break;
+    const candidate = sanitizeJson(text.slice(start, idx + 1));
     try {
-      JSON.parse(text.slice(start, idx + 1));
-      return text.slice(start, idx + 1);
+      JSON.parse(candidate);
+      return candidate;
     } catch {
       searchEnd = idx - 1;
     }
@@ -79,7 +99,7 @@ function extractJsonFromMarkdown(input: string): string {
   let match: RegExpExecArray | null;
 
   while ((match = fencedRegex.exec(trimmed)) !== null) {
-    const content = match[1].trim();
+    const content = sanitizeJson(match[1].trim());
     try {
       const parsed = JSON.parse(content);
       if (Array.isArray(parsed)) {
@@ -104,7 +124,7 @@ function extractJsonFromMarkdown(input: string): string {
 
   const inline = trimmed.match(/`([\s\S]*?)`/);
   if (inline && inline[1]) {
-    const inlineContent = inline[1].trim();
+    const inlineContent = sanitizeJson(inline[1].trim());
     try {
       JSON.parse(inlineContent);
       return inlineContent;
@@ -113,14 +133,15 @@ function extractJsonFromMarkdown(input: string): string {
     }
   }
 
+  const asJson = sanitizeJson(trimmed);
   try {
-    JSON.parse(trimmed);
-    return trimmed;
+    JSON.parse(asJson);
+    return asJson;
   } catch {
     // ignore
   }
 
-  // 在文本任意位置查找 JSON
+  // 在文本任意位置查找 JSON（内部已做 sanitize）
   const anywhere = findJsonAnywhere(trimmed);
   if (anywhere) return anywhere;
 

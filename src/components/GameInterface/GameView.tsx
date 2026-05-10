@@ -41,6 +41,22 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   const saveRef = useRef(save);
   useEffect(() => { saveRef.current = save; }, [save]);
 
+  /** 统一处理消息：去 ```json 包裹、修尾逗号、重解析 segments */
+  function processMessage(msg: Message): Message {
+    if (msg.role !== 'ai') return msg;
+    const raw = msg.rawText || '';
+    // 去 ```json ``` 包裹
+    const cleaned = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+    // 去尾逗号
+    const sanitized = cleaned.replace(/,(\s*[\]}])/g, '$1');
+    // 如果 rawText 变了，重解析 segments
+    if (sanitized !== msg.rawText || !msg.segments || msg.segments.length === 0) {
+      const { segments } = parseMessageSegments(sanitized);
+      return { ...msg, rawText: sanitized, segments: segments.length > 0 ? segments : msg.segments || [] };
+    }
+    return msg;
+  }
+
   const INPUT_DRAFT_KEY = `ta_input_draft_${save.id}`;
   const [inputDraft, setInputDraft] = useState<string>(() => {
     try { return localStorage.getItem(INPUT_DRAFT_KEY) || ''; } catch { return ''; }
@@ -147,6 +163,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     try {
       const msgs = await getMessagesBySaveId(save.id, CONTEXT_WINDOW_SIZE * 2);
       const memoryMsgs = getMemoryMessagesForSave(save.id);
+      console.log('[DB加载] 原始数据:', msgs.map(m => ({ id: m.id, role: m.role, rawText: m.rawText })));
       const merged = [...msgs];
       for (const mm of memoryMsgs) {
         const existingIdx = merged.findIndex((m) => m.id === mm.id);
@@ -174,7 +191,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         }
       }
 
-      setMessages(merged);
+      setMessages(merged.map(processMessage));
       setHasMoreMessages(msgs.length >= CONTEXT_WINDOW_SIZE * 2);
       setCurrentRound(save.metadata.roundCount);
       if (hasPendingTask(save.id)) {
@@ -232,7 +249,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           setMessages((prev) =>
             prev.map((m) =>
               m.id === aiMessage.id
-                ? { ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() }
+                ? processMessage({ ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() })
                 : m,
             ),
           );
@@ -497,7 +514,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           setMessages((prev) =>
             prev.map((m) =>
               m.id === aiMessage.id
-                ? { ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() }
+                ? processMessage({ ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() })
                 : m,
             ),
           );
@@ -649,6 +666,29 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
   const isSending = loadingState === 'sending';
   const fontSizeClass = FONT_SIZE_CLASS_MAP[save.metadata.configSnapshot?.system?.fontSize || 'medium'] || 'text-base';
+  const [elapsed, setElapsed] = useState(0);
+  const sendStartRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  useEffect(() => {
+    if (isSending) {
+      sendStartRef.current = Date.now();
+      setElapsed(0);
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - sendStartRef.current) / 1000));
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isSending]);
+
+  function formatElapsed(seconds: number): string {
+    if (seconds < 60) return `${seconds}秒`;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}分${s}秒`;
+  }
 
   return (
     <div className="h-[100dvh] flex flex-col bg-surface dark:bg-surface-dark">
@@ -689,7 +729,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
             <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
-          <span className="text-base text-indigo-600 dark:text-indigo-400 font-medium">AI 正在生成回复...</span>
+          <span className="text-base text-indigo-600 dark:text-indigo-400 font-medium">AI 正在生成回复... ({formatElapsed(elapsed)})</span>
         </div>
       )}
 

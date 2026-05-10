@@ -85,6 +85,29 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const sendStartRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  useEffect(() => {
+    if (loadingState === 'sending') {
+      sendStartRef.current = Date.now();
+      setElapsed(0);
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - sendStartRef.current) / 1000));
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [loadingState]);
+
+  function formatElapsed(seconds: number): string {
+    if (seconds < 60) return `${seconds}秒`;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}分${s}秒`;
+  }
 
   const INPUT_DRAFT_KEY = 'ta_chat_input_draft';
   const [inputDraft, setInputDraft] = useState<string>(() => {
@@ -389,8 +412,8 @@ export default function ChatView({ config, onOpenSettings, onBack, onUpdateConfi
               <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-              AI 正在生成回复...
+            <span className="text-base text-indigo-600 dark:text-indigo-400 font-medium">
+              AI 正在生成回复... ({formatElapsed(elapsed)})
             </span>
           </div>
         </div>
