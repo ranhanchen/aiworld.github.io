@@ -44,15 +44,25 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   /** 统一处理消息：去 ```json 包裹、修尾逗号、重解析 segments */
   function processMessage(msg: Message): Message {
     if (msg.role !== 'ai') return msg;
-    const raw = msg.rawText || '';
+    const raw = (msg.rawText || '').trim();
+    // 如果不是 JSON 格式，尝试从格式化文本重建 segments
+    if (!/^\[\s*\{/.test(raw) && !raw.startsWith('{')) {
+      if (!msg.segments || msg.segments.length === 0) {
+        const segs = parseEditedTextToSegments(raw, []);
+        console.log('[processMessage] 从格式化文本重建 segments:', segs.length);
+        return { ...msg, segments: segs };
+      }
+      return msg;
+    }
     // 去 ```json ``` 包裹
     const cleaned = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
-    // 去尾逗号
+    // 去尾逗号 + 转义控制字符
     const sanitized = cleaned.replace(/,(\s*[\]}])/g, '$1');
-    // 如果 rawText 变了，重解析 segments
-    if (sanitized !== msg.rawText || !msg.segments || msg.segments.length === 0) {
-      const { segments } = parseMessageSegments(sanitized);
-      return { ...msg, rawText: sanitized, segments: segments.length > 0 ? segments : msg.segments || [] };
+    // 如果 rawText 变了或 segments 为空，重解析
+    if (sanitized !== raw || !msg.segments || msg.segments.length === 0) {
+      const result = parseMessageSegments(sanitized);
+      console.log('[processMessage] 解析结果:', { rawText: sanitized.slice(0, 200), segmentsLen: result.segments.length, isValid: result.isValid, error: result.error });
+      return { ...msg, rawText: sanitized, segments: result.segments.length > 0 ? result.segments : msg.segments || [] };
     }
     return msg;
   }
