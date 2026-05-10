@@ -18,7 +18,7 @@ export default function MessageBlock({ message }: MessageBlockProps) {
         <div className="flex flex-col items-end gap-1 mb-4">
           {renderRoleChip('user')}
           <div className="max-w-[85%] bg-accent dark:bg-accent-dark text-white rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-sm">
-            <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.rawText}</p>
+            <p className="text-lg whitespace-pre-wrap leading-relaxed">{message.rawText}</p>
           </div>
         </div>
       );
@@ -30,7 +30,7 @@ export default function MessageBlock({ message }: MessageBlockProps) {
           {renderRoleChip('ai')}
           <div className="px-4 py-3 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center gap-2">
             <span className="inline-block w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-            <span className="text-sm text-text-secondary dark:text-text-secondary-dark">AI 正在生成...</span>
+            <span className="text-base text-text-secondary dark:text-text-secondary-dark">AI 正在生成...</span>
           </div>
         </div>
       );
@@ -41,7 +41,7 @@ export default function MessageBlock({ message }: MessageBlockProps) {
         <div className="flex flex-col items-start gap-1 mb-4">
           {renderRoleChip('ai')}
           <div className="max-w-[85%] bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm">
-            <p className="text-sm text-text-primary dark:text-text-primary-dark whitespace-pre-wrap leading-relaxed">{message.rawText}</p>
+            <p className="text-lg text-text-primary dark:text-text-primary-dark whitespace-pre-wrap leading-relaxed">{message.rawText}</p>
           </div>
         </div>
       );
@@ -87,7 +87,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
   switch (segment.type) {
     case 'scene':
       return (
-        <p className="text-base text-text-secondary dark:text-text-secondary-dark text-center leading-relaxed my-2 font-sans whitespace-pre-wrap">
+        <p className="text-xl text-text-secondary dark:text-text-secondary-dark text-center leading-relaxed my-2 font-sans whitespace-pre-wrap">
           {segment.content}
         </p>
       );
@@ -101,7 +101,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
           <div className="flex justify-center my-2">
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-xl px-4 py-2.5 max-w-[90%]">
               <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">{speaker}</span>
-              <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-0.5 text-center whitespace-pre-wrap">
+              <p className="text-lg text-yellow-800 dark:text-yellow-200 mt-0.5 text-center whitespace-pre-wrap">
                 {segment.content}
               </p>
             </div>
@@ -114,7 +114,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
           <span className="shrink-0 text-xs font-medium text-primary dark:text-primary-dark mt-1">
             {speaker}
           </span>
-          <p className="text-sm text-text-primary dark:text-text-primary-dark leading-relaxed bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm whitespace-pre-wrap">
+          <p className="text-lg text-text-primary dark:text-text-primary-dark leading-relaxed bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm whitespace-pre-wrap">
             {segment.content}
           </p>
         </div>
@@ -123,7 +123,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
 
     case 'action':
       return (
-        <p className="text-sm text-gray-500 dark:text-gray-400 text-center my-1 font-sans whitespace-pre-wrap">
+        <p className="text-lg text-gray-500 dark:text-gray-400 text-center my-1 font-sans whitespace-pre-wrap">
           * {segment.content}
         </p>
       );
@@ -132,7 +132,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
       return (
         <div className="flex justify-center my-2">
           <div className="bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 max-w-[90%]">
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center whitespace-pre-wrap">
+            <p className="text-lg text-gray-500 dark:text-gray-400 text-center whitespace-pre-wrap">
               {segment.content}
             </p>
           </div>
@@ -141,7 +141,7 @@ function SegmentRenderer({ segment }: SegmentRendererProps) {
 
     default:
       return (
-        <p className="text-sm text-text-secondary dark:text-text-secondary-dark whitespace-pre-wrap">
+        <p className="text-lg text-text-secondary dark:text-text-secondary-dark whitespace-pre-wrap">
           {segment.content}
         </p>
       );
