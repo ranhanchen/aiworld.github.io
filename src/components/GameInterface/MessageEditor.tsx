@@ -10,13 +10,10 @@ interface MessageEditorProps {
 export default function MessageEditor({ message, onSave, onCancel }: MessageEditorProps) {
   const [editText, setEditText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [editorHeight, setEditorHeight] = useState(() => Math.round(window.innerHeight * 0.65));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const isAiMessage = message.role === 'ai';
   const hasSegments = message.segments && message.segments.length > 0;
-  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -49,28 +46,6 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = editorHeight;
-    resizeRef.current = { startY, startH };
-
-    const onMove = (e: MouseEvent) => {
-      if (!resizeRef.current) return;
-      const newH = Math.max(200, resizeRef.current.startH + (e.clientY - resizeRef.current.startY));
-      setEditorHeight(newH);
-    };
-
-    const onUp = () => {
-      resizeRef.current = null;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -106,32 +81,15 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-6">
-          <div className="relative h-full">
-            <textarea
-              ref={textareaRef}
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark text-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
-              style={{ height: editorHeight, minHeight: '200px' }}
-              placeholder="输入消息内容..."
-            />
-            {!isTouchDevice && (
-              <div
-                className="absolute bottom-0 right-0 w-1/3 h-6 cursor-ns-resize flex items-center justify-center
-                           bg-gray-200/50 dark:bg-gray-700/50 hover:bg-gray-300/50 dark:hover:bg-gray-600/50
-                           rounded-b-xl select-none"
-                onMouseDown={handleResizeStart}
-              >
-                <div className="flex gap-1">
-                  <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
-                  <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
-                  <div className="w-5 h-0.5 bg-gray-400 dark:bg-gray-500 rounded" />
-                </div>
-              </div>
-            )}
-          </div>
+        <div className="flex-1 overflow-auto p-6 flex flex-col">
+          <textarea
+            ref={textareaRef}
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-text-primary dark:text-text-primary-dark text-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-serif leading-relaxed"
+            placeholder="输入消息内容..."
+          />
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-3">
