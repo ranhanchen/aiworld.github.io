@@ -134,6 +134,22 @@ ${toneSection}
 6. 保持剧情连贯、有趣且充满选择空间。`;
 }
 
+export function summarizeMessages(
+  apiEndpoint: string,
+  apiKey: string,
+  modelName: string,
+  previousSummary: string,
+  messagesText: string,
+  options?: { temperature?: number; topP?: number },
+): Promise<string> {
+  const userMsg = createCompressionPrompt(previousSummary, messagesText);
+  const { response } = createNonStreamingRequest(apiEndpoint, apiKey, modelName, [
+    { role: 'system', content: '你是一个专业的文字冒险游戏记忆压缩引擎。请根据以下对话内容生成一段只包含所有关键信息的结构化中文摘要。保持简洁但信息完整。' },
+    { role: 'user', content: userMsg },
+  ], options);
+  return response;
+}
+
 export function createCompressionPrompt(
   previousSummary: string,
   messagesText: string,

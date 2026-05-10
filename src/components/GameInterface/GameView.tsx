@@ -5,7 +5,7 @@ import { getActiveApi } from '@/types/config';
 import { getMessagesBySaveId, updateMessage, updateSave, deleteMessage, getMessagesByRoundRange } from '@/db/repository';
 import { createNonStreamingRequest, createSystemPrompt } from '@/config/api';
 import { parseMessageSegments } from '@/utils/parsers';
-import { COMPRESSION_THRESHOLD, COMPRESSION_WINDOW_SIZE, CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
+import { COMPRESSION_THRESHOLD, COMPRESSION_WINDOW_SIZE, COMPRESSION_NOTIFICATION_INTERVAL, CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
 import ParserWorker from '@/workers/parser.worker?worker';
 import CompressWorker from '@/workers/compress.worker?worker';
 import VirtualMessageList from '@/components/GameInterface/VirtualMessageList';
@@ -31,6 +31,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   const [contextMenuTarget, setContextMenuTarget] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [compressionNoticeDismissed, setCompressionNoticeDismissed] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingBufferRef = useRef('');
   const streamingMessageIdRef = useRef<string | null>(null);
@@ -58,12 +59,14 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     const cleaned = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
     // 去尾逗号 + 转义控制字符
     const sanitized = cleaned.replace(/,(\s*[\]}])/g, '$1');
-    // 如果 rawText 变了或 segments 为空，重解析
-    if (sanitized !== raw || !msg.segments || msg.segments.length === 0) {
-      const result = parseMessageSegments(sanitized);
-      console.log('[processMessage] 解析结果:', { rawText: sanitized.slice(0, 200), segmentsLen: result.segments.length, isValid: result.isValid, error: result.error });
-      return { ...msg, rawText: sanitized, segments: result.segments.length > 0 ? result.segments : msg.segments || [] };
+    // 重解析 segments
+    const result = parseMessageSegments(sanitized);
+    console.log('[processMessage] 解析结果:', { rawText: sanitized.slice(0, 200), segmentsLen: result.segments.length, isValid: result.isValid, error: result.error });
+    if (result.segments.length > 0) {
+      return { ...msg, rawText: sanitized, segments: result.segments };
     }
+    // 解析失败：如果 msg 原本有 segments 就保留，否则显示原始文本
+    console.warn('[processMessage] 解析失败，保留原始消息:', result.error);
     return msg;
   }
 
@@ -259,13 +262,14 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           setMessages((prev) =>
             prev.map((m) =>
               m.id === aiMessage.id
-                ? processMessage({ ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() })
+                ? processMessage({ ...m, rawText: result.rawText, status: 'completed' as const, updatedAt: Date.now() })
                 : m,
             ),
           );
         }
         setCurrentRound(roundIndex);
         setLoadingState('idle');
+        setCompressionNoticeDismissed(false);
         checkAndTriggerCompression(roundIndex);
       }).catch(() => setLoadingState('error')).finally(() => {
         streamingMessageIdRef.current = null;
@@ -524,13 +528,14 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           setMessages((prev) =>
             prev.map((m) =>
               m.id === aiMessage.id
-                ? processMessage({ ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() })
+                ? processMessage({ ...m, rawText: result.rawText, status: 'completed' as const, updatedAt: Date.now() })
                 : m,
             ),
           );
         }
         setCurrentRound(roundIndex);
         setLoadingState('idle');
+        setCompressionNoticeDismissed(false);
         checkAndTriggerCompression(roundIndex);
       }).catch(() => setLoadingState('error')).finally(() => {
         streamingMessageIdRef.current = null;
@@ -676,6 +681,8 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
 
   const isSending = loadingState === 'sending';
   const fontSizeClass = FONT_SIZE_CLASS_MAP[save.metadata.configSnapshot?.system?.fontSize || 'medium'] || 'text-base';
+  const roundsSinceCompression = currentRound - Math.max(save.lastCompressedRound || 0, 0);
+  const shouldShowCompressionNotice = !compressionNoticeDismissed && roundsSinceCompression >= COMPRESSION_NOTIFICATION_INTERVAL;
   const [elapsed, setElapsed] = useState(0);
   const sendStartRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -722,6 +729,35 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           <svg className="w-5 h-5 text-text-secondary dark:text-text-secondary-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M9 3v4m6-4v4" /></svg>
         </button>
       </header>
+
+      {shouldShowCompressionNotice && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-base text-amber-700 dark:text-amber-300">
+                已运行 {roundsSinceCompression} 回合未压缩记忆，建议压缩以保持AI上下文质量
+              </span>
+            </div>
+            <div className="flex gap-2 shrink-0 ml-4">
+              <button
+                onClick={() => { setCompressionNoticeDismissed(true); onOpenMemory(); }}
+                className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors min-h-[44px]"
+              >
+                前往压缩
+              </button>
+              <button
+                onClick={() => setCompressionNoticeDismissed(true)}
+                className="px-3 py-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 min-h-[44px]"
+              >
+                稍后
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loadingState === 'error' && (
         <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-4 py-2">

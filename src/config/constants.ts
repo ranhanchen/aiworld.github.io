@@ -16,6 +16,7 @@ export const MESSAGE_PAGE_SIZE = 30;
 
 export const COMPRESSION_THRESHOLD = 100;
 export const COMPRESSION_WINDOW_SIZE = 50;
+export const COMPRESSION_NOTIFICATION_INTERVAL = 10;
 export const CONTEXT_WINDOW_SIZE = 50;
 
 export const DEBOUNCE_SCROLL_MS = 100;
