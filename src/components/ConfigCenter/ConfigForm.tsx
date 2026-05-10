@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { GameConfig, ConfigTabKey, ApiConfig } from '@/types/config';
 import { getActiveApi } from '@/types/config';
+import ResizableTextarea from '@/components/UI/ResizableTextarea';
 import { migrateGameConfig } from '@/utils/configMigration';
 import TabPanel from '@/components/ConfigCenter/TabPanel';
 
@@ -704,10 +705,10 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               multiline
             />
             <FieldRow label="AI底层设定">
-              <textarea
+              <ResizableTextarea
                 value={config.aiRestriction.aiBasePrompt}
                 onChange={(e) => updateAiRestriction('aiBasePrompt', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-lg focus:outline-none focus:ring-2 focus:ring-accent"
                 placeholder="告诉AI如何理解玩家输入，以及如何回复的底层规则..."
                 rows={6}
               />
@@ -818,17 +819,20 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               <label className="block text-lg font-medium mb-1.5">次要目标</label>
               {config.winCondition.subGoals.map((goal, idx) => (
                 <div key={`subgoal-${idx}`} className="flex gap-2 mb-1.5">
-                  <textarea
-                    value={goal}
-                    onChange={(e) => {
-                      const updated = [...config.winCondition.subGoals];
-                      updated[idx] = e.target.value;
-                      updateWinCondition('subGoals', updated);
-                    }}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
-                    placeholder="如：结识一位盟友"
-                    rows={2}
-                  />
+                  <div className="flex-1">
+                    <ResizableTextarea
+                      value={goal}
+                      onChange={(e) => {
+                        const updated = [...config.winCondition.subGoals];
+                        updated[idx] = e.target.value;
+                        updateWinCondition('subGoals', updated);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                      placeholder="如：结识一位盟友"
+                      rows={2}
+                      minHeight={60}
+                    />
+                  </div>
                   <button
                     onClick={() => {
                       const updated = config.winCondition.subGoals.filter((_, i) => i !== idx);
@@ -852,17 +856,20 @@ export default function ConfigForm({ initialConfig, onSave, onCancel, saveMessag
               <label className="block text-lg font-medium mb-1.5">失败条件</label>
               {config.winCondition.failureConditions.map((cond, idx) => (
                 <div key={`failcond-${idx}`} className="flex gap-2 mb-1.5">
-                  <textarea
-                    value={cond}
-                    onChange={(e) => {
-                      const updated = [...config.winCondition.failureConditions];
-                      updated[idx] = e.target.value;
-                      updateWinCondition('failureConditions', updated);
-                    }}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
-                    placeholder="如：主角生命归零"
-                    rows={2}
-                  />
+                  <div className="flex-1">
+                    <ResizableTextarea
+                      value={cond}
+                      onChange={(e) => {
+                        const updated = [...config.winCondition.failureConditions];
+                        updated[idx] = e.target.value;
+                        updateWinCondition('failureConditions', updated);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                      placeholder="如：主角生命归零"
+                      rows={2}
+                      minHeight={60}
+                    />
+                  </div>
                   <button
                     onClick={() => {
                       const updated = config.winCondition.failureConditions.filter((_, i) => i !== idx);
@@ -956,28 +963,29 @@ function FieldWithGenerate({
   placeholder,
   multiline,
 }: FieldWithGenerateProps) {
-  const inputClass =
-    'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-base focus:outline-none focus:ring-2 focus:ring-accent';
-
   return (
     <FieldRow label={label}>
       <div className="flex gap-2">
         {multiline ? (
-          <textarea
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className={inputClass}
-            placeholder={placeholder}
-            rows={5}
-          />
+          <div className="flex-1 min-w-0">
+            <ResizableTextarea
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-base focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder={placeholder}
+              rows={5}
+            />
+          </div>
         ) : (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className={inputClass}
-            placeholder={placeholder}
-          />
+          <div className="flex-1 min-w-0">
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-base focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder={placeholder}
+            />
+          </div>
         )}
         <button
           onClick={onGenerate}
@@ -1017,10 +1025,10 @@ function CustomFieldRow({ fieldKey, value, onUpdate }: CustomFieldRowProps) {
           placeholder="属性名"
         />
       </div>
-      <textarea
+      <ResizableTextarea
         value={value}
         onChange={(e) => onUpdate(fieldKey, e.target.value)}
-        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-lg focus:outline-none focus:ring-2 focus:ring-accent"
         placeholder="属性值"
         rows={5}
       />

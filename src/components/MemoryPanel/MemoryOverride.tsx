@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Save } from '@/types/save';
 import type { Message } from '@/types/message';
 import { updateSave } from '@/db/repository';
+import ResizableTextarea from '@/components/UI/ResizableTextarea';
 
 interface MemoryOverrideProps {
   save: Save;
@@ -120,12 +121,13 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
             <p className="text-base text-text-secondary dark:text-text-secondary-dark mb-2">
               你可以直接修改摘要内容来干预AI的记忆走向
             </p>
-            <textarea
+            <ResizableTextarea
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               rows={10}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-lg focus:outline-none focus:ring-2 focus:ring-accent resize-vertical font-mono"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-lg focus:outline-none focus:ring-2 focus:ring-accent font-mono"
               placeholder="摘要为空时，AI将仅依赖最近的对话上下文..."
+              minHeight={150}
             />
             {message && (
               <p

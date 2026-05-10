@@ -10,7 +10,7 @@ interface MessageEditorProps {
 export default function MessageEditor({ message, onSave, onCancel }: MessageEditorProps) {
   const [editText, setEditText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [editorHeight, setEditorHeight] = useState(300);
+  const [editorHeight, setEditorHeight] = useState(() => Math.round(window.innerHeight * 0.65));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
 
@@ -83,6 +83,18 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
   const characterCount = editText.length;
   const lineCount = editText.split('\n').length;
 
+  // 直接从原始 segments 映射预览项，不做重新解析
+  const previewItems: Array<{ label: string; content: string }> = (message.segments && message.segments.length > 0)
+    ? message.segments.map(seg => ({
+        label: seg.type === 'dialogue' ? (seg.speaker || '对话')
+             : seg.type === 'scene' ? '场景'
+             : seg.type === 'action' ? '动作'
+             : seg.type === 'system' ? '系统'
+             : seg.type,
+        content: seg.content,
+      }))
+    : [];
+
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
       <div
@@ -123,9 +135,9 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
                 style={{ height: editorHeight, minHeight: '200px' }}
                 placeholder="输入消息内容..."
               />
-              {/* 自定义拖拽手柄 - 宽度1/3 */}
+              {/* 自定义拖拽手柄 - 右侧1/3宽度 */}
               <div
-                className="absolute bottom-0 left-1/3 right-1/3 h-6 cursor-ns-resize flex items-center justify-center
+                className="absolute bottom-0 right-0 w-1/3 h-6 cursor-ns-resize flex items-center justify-center
                            bg-gray-200/50 dark:bg-gray-700/50 hover:bg-gray-300/50 dark:hover:bg-gray-600/50
                            rounded-b-xl select-none"
                 onMouseDown={handleResizeStart}
@@ -147,25 +159,26 @@ export default function MessageEditor({ message, onSave, onCancel }: MessageEdit
             </div>
           </div>
 
-          {isAiMessage && hasSegments && (
+          {isAiMessage && (
             <div className="mb-4">
               <label className="block text-lg font-medium text-text-secondary dark:text-text-secondary-dark mb-2">
                 当前对话片段预览
               </label>
               <div className="space-y-2 max-h-40 overflow-auto bg-gray-50 dark:bg-gray-900 rounded-xl p-3">
-                {message.segments!.map((seg, idx) => (
+                {previewItems.length > 0 ? previewItems.map((item, idx) => (
                   <div key={idx} className="text-base bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-100 dark:border-gray-700">
                     <span className="font-bold text-accent dark:text-accent-dark uppercase">
-                      {seg.type === 'dialogue' ? seg.speaker || '对话' :
-                       seg.type === 'scene' ? '场景' :
-                       seg.type === 'action' ? '动作' :
-                       seg.type === 'system' ? '系统' : seg.type}:
+                      {item.label}:
                     </span>
                     <span className="ml-2 text-text-primary dark:text-text-primary-dark">
-                      {seg.content.length > 50 ? seg.content.substring(0, 50) + '...' : seg.content}
+                      {item.content.length > 50 ? item.content.substring(0, 50) + '...' : item.content}
                     </span>
                   </div>
-                ))}
+                )) : (
+                  <p className="text-xs text-text-secondary dark:text-text-secondary-dark text-center py-2">
+                    暂无内容
+                  </p>
+                )}
               </div>
             </div>
           )}
