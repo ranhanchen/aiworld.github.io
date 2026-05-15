@@ -5,7 +5,7 @@ import { getActiveApi } from '@/types/config';
 import { getMessagesBySaveId, updateMessage, updateSave, deleteMessage, getMessagesByRoundRange } from '@/db/repository';
 import { createNonStreamingRequest, createSystemPrompt } from '@/config/api';
 import { parseMessageSegments } from '@/utils/parsers';
-import { COMPRESSION_THRESHOLD, COMPRESSION_WINDOW_SIZE, COMPRESSION_NOTIFICATION_INTERVAL, CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
+import { COMPRESSION_THRESHOLD, COMPRESSION_WINDOW_SIZE, CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
 import ParserWorker from '@/workers/parser.worker?worker';
 import CompressWorker from '@/workers/compress.worker?worker';
 import VirtualMessageList from '@/components/GameInterface/VirtualMessageList';
@@ -682,7 +682,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
   const isSending = loadingState === 'sending';
   const fontSizeClass = FONT_SIZE_CLASS_MAP[save.metadata.configSnapshot?.system?.fontSize || 'medium'] || 'text-base';
   const roundsSinceCompression = currentRound - Math.max(save.lastCompressedRound || 0, 0);
-  const shouldShowCompressionNotice = !compressionNoticeDismissed && roundsSinceCompression >= COMPRESSION_NOTIFICATION_INTERVAL;
+  const shouldShowCompressionNotice = !compressionNoticeDismissed && roundsSinceCompression >= 10 && roundsSinceCompression % 5 === 0;
   const [elapsed, setElapsed] = useState(0);
   const sendStartRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
