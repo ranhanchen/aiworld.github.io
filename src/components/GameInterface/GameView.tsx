@@ -328,7 +328,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     if (currentSave.currentSummary) {
       chatMessages.push({ role: 'system', content: `[历史摘要]\n${currentSave.currentSummary}` });
     }
-    const recent = precedingMessages.slice(-CONTEXT_WINDOW_SIZE * 2);
+    const recent = precedingMessages.filter(m => m.roundIndex > currentSave.lastCompressedRound).slice(-CONTEXT_WINDOW_SIZE * 2);
     for (const msg of recent) {
       chatMessages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.rawText });
     }
@@ -843,7 +843,7 @@ function buildChatContext(messages: Message[], userMessage: Message, save: Save)
 
   const result: Array<{ role: string; content: string }> = [{ role: 'system', content: systemPrompt }];
   if (save.currentSummary) result.push({ role: 'system', content: `[历史摘要]\n${save.currentSummary}` });
-  const recentMessages = messages.slice(-CONTEXT_WINDOW_SIZE * 2);
+  const recentMessages = messages.filter(m => m.roundIndex > save.lastCompressedRound).slice(-CONTEXT_WINDOW_SIZE * 2);
   for (const msg of recentMessages) result.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.rawText });
   result.push({ role: 'user', content: userMessage.rawText });
   return result;
@@ -872,7 +872,7 @@ function buildContinueContext(messages: Message[], save: Save): Array<{ role: st
 
   const result: Array<{ role: string; content: string }> = [{ role: 'system', content: systemPrompt }];
   if (save.currentSummary) result.push({ role: 'system', content: `[历史摘要]\n${save.currentSummary}` });
-  const recentMessages = messages.slice(-CONTEXT_WINDOW_SIZE * 2);
+  const recentMessages = messages.filter(m => m.roundIndex > save.lastCompressedRound).slice(-CONTEXT_WINDOW_SIZE * 2);
   for (const msg of recentMessages) result.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.rawText });
   result.push({ role: 'user', content: CONTINUE_STORY_PROMPT });
   return result;
