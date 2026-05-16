@@ -443,6 +443,7 @@ export async function importSaves(jsonString: string): Promise<{ imported: numbe
     }
 
     try {
+      migratedSave.updatedAt = Date.now();
       await putToStore(STORE_SAVES, migratedSave);
       saveToLocalBackup(migratedSave);
       imported++;
@@ -467,6 +468,7 @@ export async function importSaves(jsonString: string): Promise<{ imported: numbe
       if (saveMessages.length > 0) {
         const messagesToImport = saveMessages.map(m => ({
           ...m,
+          id: generateId(),
           saveId: migratedSave.id,
           createdAt: m.createdAt || Date.now(),
           updatedAt: m.updatedAt || Date.now(),
