@@ -3,7 +3,7 @@ import type { Save } from '@/types/save';
 import type { Message } from '@/types/message';
 import { getActiveApi } from '@/types/config';
 import { updateSave, getMessagesByRoundRange } from '@/db/repository';
-import { createNonStreamingRequest, createCompressionPrompt, DEFAULT_COMPRESSION_PROMPT } from '@/config/api';
+import { createNonStreamingRequest, DEFAULT_COMPRESSION_PROMPT } from '@/config/api';
 import ResizableTextarea from '@/components/UI/ResizableTextarea';
 import ConfirmDialog from '@/components/Common/ConfirmDialog';
 
@@ -149,14 +149,19 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
       const messagesText = selectedMsgs
         .map(m => (m.role === 'user' ? '【玩家】' : '【AI】') + (m.rawText || ''))
         .join('\n\n---\n\n');
-      const userMsg = createCompressionPrompt(liveSave.currentSummary, messagesText, compressionPrompt || undefined);
+      const systemContent = compressionPrompt || DEFAULT_COMPRESSION_PROMPT;
+      const userContent = `${liveSave.currentSummary ? `## 已有摘要（若存在）
+${liveSave.currentSummary}
+
+` : ''}## 需要压缩的对话内容
+${messagesText}`;
       const { response } = createNonStreamingRequest(
         networkConfig.apiEndpoint,
         networkConfig.apiKey,
         networkConfig.modelName,
         [
-          { role: 'system', content: '你是一个专业的文字冒险游戏记忆压缩引擎。请根据以下对话内容生成一段只包含所有关键信息的结构化中文摘要。保持简洁但信息完整。' },
-          { role: 'user', content: userMsg },
+          { role: 'system', content: systemContent },
+          { role: 'user', content: userContent },
         ],
         { temperature: 0.3, topP: 0.9 },
       );
