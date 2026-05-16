@@ -27,6 +27,13 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
   const [compressionPrompt, setCompressionPrompt] = useState(liveSave.compressionPrompt || DEFAULT_COMPRESSION_PROMPT);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
 
+  // 当 liveSave 从 DB 加载后，同步 compressionPrompt
+  useEffect(() => {
+    if (liveSave.compressionPrompt !== undefined) {
+      setCompressionPrompt(liveSave.compressionPrompt || DEFAULT_COMPRESSION_PROMPT);
+    }
+  }, [liveSave.compressionPrompt]);
+
   const firstUnsummarizedRound = Math.max(1, (liveSave.lastCompressedRound || 0) + 1);
   const hasUnsummarizedContent = firstUnsummarizedRound <= liveSave.metadata.roundCount;
   const selectedCount = selectedRounds.size;
@@ -110,7 +117,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
     setSaving(true);
     setMessage(null);
     try {
-      const updateFields: Parameters<typeof updateSave>[1] = { currentSummary: summary, compressionPrompt };
+      const updateFields: Parameters<typeof updateSave>[1] = { currentSummary: summary };
       if (selectedRounds.size > 0) {
         const lastRound = Math.max(...selectedRounds);
         if (lastRound > (liveSave.lastCompressedRound || 0)) {
@@ -130,7 +137,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
     } finally {
       setSaving(false);
     }
-  }, [liveSave, summary, compressionPrompt, selectedRounds, onSaveUpdate]);
+  }, [liveSave, summary, selectedRounds, onSaveUpdate]);
 
   // 一键总结
   const handleOneClickSummary = useCallback(async () => {
@@ -160,7 +167,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
     } finally {
       setIsSummarizing(false);
     }
-  }, [networkConfig, displayMessages, selectedRounds, liveSave.currentSummary]);
+  }, [networkConfig, displayMessages, selectedRounds, liveSave.currentSummary, compressionPrompt]);
 
   // 重置
   const handleReset = useCallback(async () => {
@@ -344,7 +351,18 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
             minHeight={200}
           />
           <button
-            onClick={() => setShowPromptEditor(false)}
+            onClick={async () => {
+              try {
+                const updated = await updateSave(save.id, { compressionPrompt });
+                if (updated) {
+                  setLiveSave(updated);
+                  onSaveUpdate?.(updated);
+                }
+              } catch (e) {
+                console.error('保存提示词失败:', e);
+              }
+              setShowPromptEditor(false);
+            }}
             className="mt-3 self-end px-6 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
           >
             完成
