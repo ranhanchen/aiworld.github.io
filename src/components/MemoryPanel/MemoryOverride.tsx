@@ -142,10 +142,12 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
   // 一键总结
   const handleOneClickSummary = useCallback(async () => {
     if (!networkConfig || selectedRounds.size === 0) return;
+    console.log('[MemoryOverride] 一键总结 selectedRounds:', [...selectedRounds], 'displayMessages:', displayMessages.length);
     setIsSummarizing(true);
     setSummaryError(null);
     try {
       const selectedMsgs = displayMessages.filter(m => selectedRounds.has(m.roundIndex));
+      console.log('[MemoryOverride] 筛选后 selectedMsgs:', selectedMsgs.length, 'rounds:', selectedMsgs.map(m => m.roundIndex));
       const messagesText = selectedMsgs
         .map(m => (m.role === 'user' ? '【玩家】' : '【AI】') + (m.rawText || ''))
         .join('\n\n---\n\n');
@@ -179,6 +181,7 @@ ${messagesText}`;
     setShowResetConfirm(false);
     try {
       const updated = await updateSave(save.id, { currentSummary: '', lastCompressedRound: 0 });
+      console.log('[MemoryOverride] 重置后 updated:', !!updated, 'lastCompressedRound:', updated?.lastCompressedRound);
       if (updated) {
         setSummary('');
         setSelectedRounds(new Set());
@@ -255,7 +258,7 @@ ${messagesText}`;
 
                     return (
                       <div
-                        key={msg.roundIndex}
+                        key={msg.id}
                         className={`flex items-start gap-2 p-2 rounded-lg ${
                           isCompressed || isSkipped ? 'opacity-50' : ''
                         }`}
