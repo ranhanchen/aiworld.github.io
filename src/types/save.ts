@@ -15,6 +15,7 @@ export interface Save {
   metadata: SaveMetadata;
   currentSummary: string;
   lastCompressedRound: number;
+  compressionPrompt: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -28,4 +29,5 @@ export interface SaveUpdateDTO {
   metadata?: Partial<SaveMetadata>;
   currentSummary?: string;
   lastCompressedRound?: number;
+  compressionPrompt?: string;
 }

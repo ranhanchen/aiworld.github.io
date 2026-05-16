@@ -70,6 +70,7 @@ export async function createSave(dto: SaveCreateDTO): Promise<Save> {
     },
     currentSummary: dto.currentSummary || '',
     lastCompressedRound: 0,
+    compressionPrompt: '',
     createdAt: now,
     updatedAt: now,
   };
@@ -132,6 +133,7 @@ export async function updateSave(id: string, dto: SaveUpdateDTO): Promise<Save |
       : existing.metadata,
     currentSummary: dto.currentSummary ?? existing.currentSummary,
     lastCompressedRound: dto.lastCompressedRound ?? existing.lastCompressedRound,
+    compressionPrompt: dto.compressionPrompt ?? existing.compressionPrompt,
     updatedAt: Date.now(),
   };
 

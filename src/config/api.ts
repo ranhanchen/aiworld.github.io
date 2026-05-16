@@ -150,17 +150,7 @@ export function summarizeMessages(
   return response;
 }
 
-export function createCompressionPrompt(
-  previousSummary: string,
-  messagesText: string,
-): string {
-  return `你是一个专业的文字冒险游戏记忆压缩引擎。请阅读以下对话内容并生成一个结构化的摘要。
-
-## 已有摘要（若存在）
-${previousSummary || '（无已有摘要）'}
-
-## 需要压缩的对话内容
-${messagesText}
+export const DEFAULT_COMPRESSION_PROMPT = `你是一个专业的文字冒险游戏记忆压缩引擎。请阅读以下对话内容并生成一个结构化的摘要。
 
 ## 压缩要求
 请生成一个包含以下要素的结构化摘要：
@@ -171,4 +161,19 @@ ${messagesText}
 5. **关键信息**：可能影响未来剧情的重要细节
 
 请用中文输出，保持简洁但信息完整。`;
+
+export function createCompressionPrompt(
+  previousSummary: string,
+  messagesText: string,
+  customPrompt?: string,
+): string {
+  const instruction = customPrompt || DEFAULT_COMPRESSION_PROMPT;
+
+  return `${instruction}
+
+## 已有摘要（若存在）
+${previousSummary || '（无已有摘要）'}
+
+## 需要压缩的对话内容
+${messagesText}`;
 }

@@ -3,7 +3,7 @@ import type { Save } from '@/types/save';
 import type { Message } from '@/types/message';
 import { getActiveApi } from '@/types/config';
 import { updateSave, getMessagesByRoundRange } from '@/db/repository';
-import { createNonStreamingRequest, createCompressionPrompt } from '@/config/api';
+import { createNonStreamingRequest, createCompressionPrompt, DEFAULT_COMPRESSION_PROMPT } from '@/config/api';
 import ResizableTextarea from '@/components/UI/ResizableTextarea';
 import ConfirmDialog from '@/components/Common/ConfirmDialog';
 
@@ -24,6 +24,8 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [compressionPrompt, setCompressionPrompt] = useState(liveSave.compressionPrompt || DEFAULT_COMPRESSION_PROMPT);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
 
   const firstUnsummarizedRound = Math.max(1, (liveSave.lastCompressedRound || 0) + 1);
   const hasUnsummarizedContent = firstUnsummarizedRound <= liveSave.metadata.roundCount;
@@ -108,7 +110,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
     setSaving(true);
     setMessage(null);
     try {
-      const updateFields: Parameters<typeof updateSave>[1] = { currentSummary: summary };
+      const updateFields: Parameters<typeof updateSave>[1] = { currentSummary: summary, compressionPrompt };
       if (selectedRounds.size > 0) {
         const lastRound = Math.max(...selectedRounds);
         if (lastRound > (liveSave.lastCompressedRound || 0)) {
@@ -128,7 +130,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
     } finally {
       setSaving(false);
     }
-  }, [liveSave, summary, selectedRounds, onSaveUpdate]);
+  }, [liveSave, summary, compressionPrompt, selectedRounds, onSaveUpdate]);
 
   // 一键总结
   const handleOneClickSummary = useCallback(async () => {
@@ -140,7 +142,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
       const messagesText = selectedMsgs
         .map(m => (m.role === 'user' ? '【玩家】' : '【AI】') + (m.rawText || ''))
         .join('\n\n---\n\n');
-      const userMsg = createCompressionPrompt(liveSave.currentSummary, messagesText);
+      const userMsg = createCompressionPrompt(liveSave.currentSummary, messagesText, compressionPrompt || undefined);
       const { response } = createNonStreamingRequest(
         networkConfig.apiEndpoint,
         networkConfig.apiKey,
@@ -302,16 +304,54 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
         </div>
 
         {/* 底部按钮 */}
-        <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+        <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center gap-2">
           <button
             onClick={() => setShowResetConfirm(true)}
             className="px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors min-h-[44px]"
           >
             重置压缩
           </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => setShowPromptEditor(!showPromptEditor)}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors min-h-[44px] ${
+              showPromptEditor
+                ? 'bg-accent text-white'
+                : 'text-text-secondary dark:text-text-secondary-dark hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            总结提示词
+          </button>
         </div>
       </div>
     </div>
+
+    {showPromptEditor && (
+      <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center" onClick={() => setShowPromptEditor(false)}>
+        <div
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-2xl max-h-[80vh] flex flex-col p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-lg font-semibold mb-2">总结提示词</h3>
+          <p className="text-sm text-text-secondary dark:text-text-secondary-dark mb-3">
+            修改下面提示词可自定义 AI 总结记忆的方式。默认提示词已预填。
+          </p>
+          <ResizableTextarea
+            value={compressionPrompt}
+            onChange={(e) => setCompressionPrompt(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+            rows={12}
+            minHeight={200}
+          />
+          <button
+            onClick={() => setShowPromptEditor(false)}
+            className="mt-3 self-end px-6 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+          >
+            完成
+          </button>
+        </div>
+      </div>
+    )}
 
     {showResetConfirm && (
       <ConfirmDialog
