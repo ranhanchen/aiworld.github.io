@@ -195,7 +195,7 @@ ${messagesText}`;
 
   return (
     <>
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={handleClose}>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
       <div
         className="w-[90vw] h-[90vh] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
