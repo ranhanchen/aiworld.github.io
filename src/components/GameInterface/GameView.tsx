@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Save } from '@/types/save';
 import type { Message, MessageSegment } from '@/types/message';
 import { getActiveApi } from '@/types/config';
-import { getMessagesBySaveId, updateMessage, updateSave, deleteMessage, getMessagesByRoundRange } from '@/db/repository';
-import { createNonStreamingRequest, createSystemPrompt } from '@/config/api';
+import { getMessagesBySaveId, updateMessage, updateSave, deleteMessage, getMessagesByRoundRange, getMessage } from '@/db/repository';
+import { createNonStreamingRequest, createSystemPrompt, summarizeMessages } from '@/config/api';
 import { parseMessageSegments } from '@/utils/parsers';
 import { COMPRESSION_THRESHOLD, COMPRESSION_WINDOW_SIZE, CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
 import ParserWorker from '@/workers/parser.worker?worker';
-import CompressWorker from '@/workers/compress.worker?worker';
+
 import VirtualMessageList from '@/components/GameInterface/VirtualMessageList';
 import InputArea from '@/components/GameInterface/InputArea';
 import ContextMenu from '@/components/GameInterface/ContextMenu';
@@ -257,15 +257,26 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       setLoadingState('sending');
       streamingMessageIdRef.current = aiMessage.id;
 
-      completion.then((result) => {
+      completion.then(async (result) => {
         if (result) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMessage.id
-                ? processMessage({ ...m, rawText: result.rawText, status: 'completed' as const, updatedAt: Date.now() })
-                : m,
-            ),
-          );
+          const dbMessage = await getMessage(result.targetId);
+          if (dbMessage) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id
+                  ? processMessage(dbMessage)
+                  : m,
+              ),
+            );
+          } else {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id
+                  ? processMessage({ ...m, rawText: result.rawText, status: 'completed' as const, updatedAt: Date.now() })
+                  : m,
+              ),
+            );
+          }
         }
         setCurrentRound(roundIndex);
         setLoadingState('idle');
@@ -353,14 +364,25 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     }
 
     const { segments, isValid } = await parseWithFallback(aiMessage.id, fullText);
-    try { await updateMessage(aiMessage.id, { rawText: fullText, segments: isValid ? segments : [], status: 'completed' }); } catch {}
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === aiMessage.id
-          ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
-          : m,
-      ),
-    );
+    await updateMessage(aiMessage.id, { rawText: fullText, segments: isValid ? segments : [], status: 'completed' });
+    const dbMessage = await getMessage(aiMessage.id);
+    if (dbMessage) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiMessage.id
+            ? processMessage(dbMessage)
+            : m,
+        ),
+      );
+    } else {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiMessage.id
+            ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+            : m,
+        ),
+      );
+    }
     setLoadingState('idle');
   }, [messages, parseWithFallback, getNetworkConfig]);
 
@@ -410,14 +432,25 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     }
 
     const { segments, isValid } = await parseWithFallback(aiMessage.id, fullText);
-    try { await updateMessage(aiMessage.id, { rawText: fullText, segments: isValid ? segments : [], status: 'completed' }); } catch {}
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === aiMessage.id
-          ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
-          : m,
-      ),
-    );
+    await updateMessage(aiMessage.id, { rawText: fullText, segments: isValid ? segments : [], status: 'completed' });
+    const dbMessage = await getMessage(aiMessage.id);
+    if (dbMessage) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiMessage.id
+            ? processMessage(dbMessage)
+            : m,
+        ),
+      );
+    } else {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiMessage.id
+            ? { ...m, rawText: fullText, segments: isValid ? segments : [], status: 'completed' as const }
+            : m,
+        ),
+      );
+    }
     setLoadingState('idle');
   }, [messages, parseWithFallback, getNetworkConfig]);
 
@@ -443,7 +476,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
           if (message.role !== 'user') break;
           setConfirmDialog({
             message: '重新发送将删除此消息及之后的所有消息，并重新调用AI生成。确定要继续吗？',
-            onConfirm: () => {
+            onConfirm: async () => {
               setConfirmDialog(null);
               const targetIndex = messages.findIndex((m) => m.id === message.id);
               if (targetIndex === -1) return;
@@ -453,9 +486,52 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
                 deleteMessage(m.id).catch((e) => console.warn('[GameView] 重新发送：删除消息失败:', m.id, e));
               }
               setMessages(keptMessages);
-              setCurrentRound(message.roundIndex);
-              setLoadingState('idle');
-              setTimeout(() => { handleSendMessageRef.current(message.rawText); }, 100);
+              const newRound = message.roundIndex;
+              setCurrentRound(newRound);
+              setLoadingState('sending');
+
+              try {
+                const latestSave = saveRef.current;
+                const { apiEndpoint, apiKey, modelName, temperature, topP } = getNetworkConfig();
+                if (!apiKey || !apiEndpoint) { setLoadingState('error'); return; }
+                const chatMessages = buildChatContext(keptMessages, { role: 'user', rawText: message.rawText } as Message, latestSave);
+
+                const { userMessage: newUserMsg, aiMessage, completion } = startBackgroundAIRequest({
+                  saveId: latestSave.id, roundIndex: newRound, userRawText: message.rawText, chatMessages, apiEndpoint, apiKey, modelName, temperature, topP,
+                });
+
+                setMessages((prev) => [...prev, newUserMsg, aiMessage]);
+
+                completion.then(async (result) => {
+                  if (result) {
+                    const dbMessage = await getMessage(result.targetId);
+                    if (dbMessage) {
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          m.id === aiMessage.id
+                            ? processMessage(dbMessage)
+                            : m,
+                        ),
+                      );
+                    } else {
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          m.id === aiMessage.id
+                            ? processMessage({ ...m, rawText: result.rawText, status: 'completed' as const, updatedAt: Date.now() })
+                            : m,
+                        ),
+                      );
+                    }
+                  }
+                  setCurrentRound(newRound);
+                  setLoadingState('idle');
+                  setCompressionNoticeDismissed(false);
+                  checkAndTriggerCompression(newRound);
+                }).catch(() => setLoadingState('error'));
+              } catch (err) {
+                console.error('[GameView] 重新发送异常:', err);
+                setLoadingState('error');
+              }
             },
           });
           break;
@@ -501,7 +577,7 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         }
       }
     },
-    [messages, save, handleRegenerateInPlace, handleRewriteInPlace],
+    [messages, save, handleRegenerateInPlace, handleRewriteInPlace, getNetworkConfig],
   );
 
   const handleContinueStory = useCallback(async () => {
@@ -523,15 +599,26 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
       setLoadingState('sending');
       streamingMessageIdRef.current = aiMessage.id;
 
-      completion.then((result) => {
+      completion.then(async (result) => {
         if (result) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMessage.id
-                ? processMessage({ ...m, rawText: result.rawText, status: 'completed' as const, updatedAt: Date.now() })
-                : m,
-            ),
-          );
+          const dbMessage = await getMessage(result.targetId);
+          if (dbMessage) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id
+                  ? processMessage(dbMessage)
+                  : m,
+              ),
+            );
+          } else {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMessage.id
+                  ? processMessage({ ...m, rawText: result.rawText, status: 'completed' as const, updatedAt: Date.now() })
+                  : m,
+              ),
+            );
+          }
         }
         setCurrentRound(roundIndex);
         setLoadingState('idle');
@@ -556,15 +643,24 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     try {
       const rangeMsgs = await getMessagesByRoundRange(latestSave.id, round - COMPRESSION_WINDOW_SIZE, round);
       if (rangeMsgs.length < COMPRESSION_WINDOW_SIZE) return;
-      const compressWorker = new CompressWorker();
-      const summary = await new Promise<string>((res, rej) => {
-        compressWorker.onmessage = (e) => res(e.data);
-        compressWorker.onerror = (err) => rej(err);
-        compressWorker.postMessage({ previousSummary: latestSave.currentSummary, messages: rangeMsgs });
-      });
-      await updateSave(latestSave.id, { currentSummary: summary, lastCompressedRound: round });
+      const { apiEndpoint, apiKey, modelName } = getNetworkConfig();
+      if (!apiKey || !apiEndpoint) return;
+      const messagesText = rangeMsgs
+        .map(m => (m.role === 'user' ? '【玩家】' : '【AI】') + (m.rawText || ''))
+        .join('\n\n---\n\n');
+      const summary = await summarizeMessages(
+        apiEndpoint,
+        apiKey,
+        modelName,
+        latestSave.currentSummary || '',
+        messagesText,
+        { temperature: 0.3, topP: 0.9 },
+      );
+      if (summary) {
+        await updateSave(latestSave.id, { currentSummary: summary, lastCompressedRound: round });
+      }
     } catch (e) { console.warn('[GameView] 压缩失败:', e); }
-  }, []);
+  }, [getNetworkConfig]);
 
   const handleRegenerateAfterEdit = useCallback(async (text: string) => {
     const latestSave = saveRef.current;
@@ -583,15 +679,26 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     setCurrentRound(roundIndex);
     setLoadingState('sending');
 
-    completion.then((result) => {
+    completion.then(async (result) => {
       if (result) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === aiMessage.id
-              ? { ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() }
-              : m,
-          ),
-        );
+        const dbMessage = await getMessage(result.targetId);
+        if (dbMessage) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id
+                ? processMessage(dbMessage)
+                : m,
+            ),
+          );
+        } else {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessage.id
+                ? { ...m, rawText: result.rawText, segments: result.segments, status: 'completed' as const, updatedAt: Date.now() }
+                : m,
+            ),
+          );
+        }
       }
       setCurrentRound(roundIndex);
       setLoadingState('idle');
@@ -654,16 +761,22 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         const updatedSegments = parseEditedTextToSegments(editedText, oldSegments);
         const updatedMsg = { ...target, rawText: editedText, segments: updatedSegments, updatedAt };
         setMessages((prev) => prev.map((m) => m.id === target.id ? updatedMsg : m));
-        updateMessage(target.id, { rawText: editedText, segments: updatedSegments }).catch((e) => console.error('[GameView] AI消息编辑保存DB失败:', e));
+        try {
+          await updateMessage(target.id, { rawText: editedText, segments: updatedSegments });
+        } catch (e) { console.error('[GameView] AI消息编辑保存DB失败:', e); }
       } else {
         const updatedMsg = { ...target, rawText: editedText, updatedAt };
         setMessages((prev) => prev.map((m) => m.id === target.id ? updatedMsg : m));
-        updateMessage(target.id, { rawText: editedText }).catch((e) => console.error('[GameView] 用户消息编辑保存DB失败:', e));
+        try {
+          await updateMessage(target.id, { rawText: editedText });
+        } catch (e) { console.error('[GameView] 用户消息编辑保存DB失败:', e); }
 
         const aiMsg = messages.find((m) => m.roundIndex === target.roundIndex && m.role === 'ai');
         if (aiMsg) {
           setMessages((prev) => prev.filter((m) => m.id !== aiMsg.id));
-          deleteMessage(aiMsg.id).catch((e) => console.warn('[GameView] 删除旧AI消息失败:', e));
+          try {
+            await deleteMessage(aiMsg.id);
+          } catch (e) { console.warn('[GameView] 删除旧AI消息失败:', e); }
         }
         setEditingMessage(null);
         editingMessageRef.current = null;

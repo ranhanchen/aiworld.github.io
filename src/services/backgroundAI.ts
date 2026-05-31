@@ -80,7 +80,7 @@ export function startBackgroundAIRequest(params: {
   modelName: string;
   temperature: number;
   topP: number;
-}): { userMessage: Message; aiMessage: Message; completion: Promise<{ rawText: string; segments: MessageSegment[] } | undefined> } {
+}): { userMessage: Message; aiMessage: Message; completion: Promise<{ rawText: string; segments: MessageSegment[]; targetId: string } | undefined> } {
   const { saveId, roundIndex, userRawText, chatMessages, apiEndpoint, apiKey, modelName, temperature, topP } = params;
 
   abortPendingTask(saveId);
@@ -219,7 +219,7 @@ export function startBackgroundAIRequest(params: {
     }
 
     pendingTasks.delete(saveId);
-    return { rawText: fullText, segments: isValid ? segments : [] };
+    return { rawText: fullText, segments: isValid ? segments : [], targetId };
   })();
 
   pendingTasks.set(saveId, {
