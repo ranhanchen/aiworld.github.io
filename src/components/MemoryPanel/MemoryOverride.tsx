@@ -65,7 +65,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
     return () => { cancelled = true; };
   }, [save.id]);
 
-  // 加载消息列表
+  // 加载未压缩的消息列表
   useEffect(() => {
     if (!hasUnsummarizedContent) return;
     (async () => {
@@ -73,8 +73,7 @@ export default function MemoryOverride({ save, onClose, onSaveUpdate }: MemoryOv
       try {
         const msgs = await getMessagesByRoundRange(save.id, firstUnsummarizedRound, liveSave.metadata.roundCount);
         setDisplayMessages(msgs);
-      } catch (e) {
-        console.error('获取未压缩消息失败:', e);
+      } catch {
       } finally {
         setLoadingMessages(false);
       }

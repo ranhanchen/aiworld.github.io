@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Save } from '@/types/save';
 import type { Message, MessageSegment } from '@/types/message';
 import { getActiveApi } from '@/types/config';
-import { getMessagesBySaveId, updateMessage, updateSave, deleteMessage, getMessagesByRoundRange, getMessage } from '@/db/repository';
-import { createNonStreamingRequest, createSystemPrompt, summarizeMessages } from '@/config/api';
+import { getMessagesBySaveId, updateMessage, updateSave, deleteMessage, getMessage } from '@/db/repository';
+import { createNonStreamingRequest, createSystemPrompt } from '@/config/api';
 import { parseMessageSegments } from '@/utils/parsers';
-import { COMPRESSION_THRESHOLD, COMPRESSION_WINDOW_SIZE, CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
+import { CONTEXT_WINDOW_SIZE, MESSAGE_PAGE_SIZE, FONT_SIZE_CLASS_MAP, CONTINUE_STORY_PROMPT } from '@/config/constants';
 import ParserWorker from '@/workers/parser.worker?worker';
 
 import VirtualMessageList from '@/components/GameInterface/VirtualMessageList';
@@ -281,7 +281,6 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         setCurrentRound(roundIndex);
         setLoadingState('idle');
         setCompressionNoticeDismissed(false);
-        checkAndTriggerCompression(roundIndex);
       }).catch(() => setLoadingState('error')).finally(() => {
         streamingMessageIdRef.current = null;
         streamingBufferRef.current = '';
@@ -526,7 +525,6 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
                   setCurrentRound(newRound);
                   setLoadingState('idle');
                   setCompressionNoticeDismissed(false);
-                  checkAndTriggerCompression(newRound);
                 }).catch(() => setLoadingState('error'));
               } catch (err) {
                 console.error('[GameView] 重新发送异常:', err);
@@ -623,7 +621,6 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
         setCurrentRound(roundIndex);
         setLoadingState('idle');
         setCompressionNoticeDismissed(false);
-        checkAndTriggerCompression(roundIndex);
       }).catch(() => setLoadingState('error')).finally(() => {
         streamingMessageIdRef.current = null;
         streamingBufferRef.current = '';
@@ -636,31 +633,6 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
     handleContinueStoryRef.current = handleContinueStory;
     handleSendMessageRef.current = handleSendMessage;
   }, [handleContinueStory, handleSendMessage]);
-
-  const checkAndTriggerCompression = useCallback(async (round: number) => {
-    if (round < COMPRESSION_THRESHOLD) return;
-    const latestSave = saveRef.current;
-    try {
-      const rangeMsgs = await getMessagesByRoundRange(latestSave.id, round - COMPRESSION_WINDOW_SIZE, round);
-      if (rangeMsgs.length < COMPRESSION_WINDOW_SIZE) return;
-      const { apiEndpoint, apiKey, modelName } = getNetworkConfig();
-      if (!apiKey || !apiEndpoint) return;
-      const messagesText = rangeMsgs
-        .map(m => (m.role === 'user' ? '【玩家】' : '【AI】') + (m.rawText || ''))
-        .join('\n\n---\n\n');
-      const summary = await summarizeMessages(
-        apiEndpoint,
-        apiKey,
-        modelName,
-        latestSave.currentSummary || '',
-        messagesText,
-        { temperature: 0.3, topP: 0.9 },
-      );
-      if (summary) {
-        await updateSave(latestSave.id, { currentSummary: summary, lastCompressedRound: round });
-      }
-    } catch (e) { console.warn('[GameView] 压缩失败:', e); }
-  }, [getNetworkConfig]);
 
   const handleRegenerateAfterEdit = useCallback(async (text: string) => {
     const latestSave = saveRef.current;
