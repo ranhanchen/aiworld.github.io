@@ -481,9 +481,9 @@ export default function GameView({ save, onOpenMemory, onBackToMenu }: GameViewP
               if (targetIndex === -1) return;
               const messagesToRemove = messages.slice(targetIndex);
               const keptMessages = messages.slice(0, targetIndex);
-              for (const m of messagesToRemove) {
-                deleteMessage(m.id).catch((e) => console.warn('[GameView] 重新发送：删除消息失败:', m.id, e));
-              }
+              await Promise.all(messagesToRemove.map((m) =>
+                deleteMessage(m.id).catch((e) => console.warn('[GameView] 重新发送：删除消息失败:', m.id, e))
+              ));
               setMessages(keptMessages);
               const newRound = message.roundIndex;
               setCurrentRound(newRound);
